@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "RSI AUDifier",
+  "version": "0.2.0",
+  "description": "Hover over a USD price on the Roberts Space Industries store to see it in AUD, converted at the current exchange rate.",
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "permissions": ["storage", "alarms"],
+  "host_permissions": [
+    "https://open.er-api.com/*",
+    "https://api.frankfurter.app/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://robertsspaceindustries.com/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -11,8 +11,11 @@ Move the mouse away and it returns to USD.
 ## Install (development)
 1. Clone or download this repo.
 2. Open `chrome://extensions` and enable **Developer mode**.
-3. Click **Load unpacked** and select this folder.
-4. Visit the RSI store and hover over a price.
+
+For Opera or OperaGX use `opera://extensions`
+
+4. Click **Load unpacked** and select this folder.
+5. Visit the RSI store and hover over a price.
 
 ## How it works
 - `content.js` finds price text (e.g. `$45.00 USD`) and wraps it in a two-layer element; `content.css` handles the slide animation.

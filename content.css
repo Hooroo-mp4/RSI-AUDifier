@@ -1,27 +1,12 @@
-/* The wrapper clips the two stacked layers; the grid makes it as wide as the wider text,
-   so nothing around it jumps when you hover. */
-.rsi-aud-wrap {
-  display: inline-grid;
-  justify-items: start;
-  overflow: hidden;
-  vertical-align: bottom;
-  padding: 0.12em 0;
-  margin: -0.12em 0;
-}
+/* Idle state: the wrapper is a plain inline span, so surrounding layout is untouched
+   (and things like strike-through on the parent still apply). */
+.rsi-aud-layer { white-space: nowrap; }
+.rsi-aud-aud { display: none; }
+.rsi-aud-wrap.rsi-show-aud > .rsi-aud-usd { display: none; }
+.rsi-aud-wrap.rsi-show-aud > .rsi-aud-aud { display: inline; }
 
-.rsi-aud-layer {
-  grid-area: 1 / 1;
-  white-space: nowrap;
-  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease;
-}
-
-.rsi-aud-usd { transform: translateY(0); opacity: 1; }
-.rsi-aud-aud { transform: translateY(110%); opacity: 0; }
-
-/* .rsi-active is set by content.js on the price and its "USD" label together */
-.rsi-aud-wrap.rsi-active .rsi-aud-usd { transform: translateY(-110%); opacity: 0; }
-.rsi-aud-wrap.rsi-active .rsi-aud-aud { transform: translateY(0); opacity: 1; }
-
-@media (prefers-reduced-motion: reduce) {
-  .rsi-aud-layer { transition: opacity 0.15s ease; transform: none !important; }
-}
+/* Animation state (only while a swipe is running): both layers are shown,
+   the incoming one is overlaid on the outgoing one, and the box clips vertically. */
+.rsi-aud-wrap.rsi-animating { display: inline-block; position: relative; }
+.rsi-aud-wrap.rsi-animating > .rsi-aud-layer { display: inline-block; }
+.rsi-aud-wrap.rsi-animating > .rsi-incoming { position: absolute; left: 0; top: 0; }

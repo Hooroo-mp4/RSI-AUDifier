@@ -20,7 +20,7 @@ Hover over a USD price and it swipes up and away, replaced by the price in **AUD
 | Brave | ✅ |
 | Firefox | ❌ not supported |
 
-Also works with **Star Citizen Hangar XPLORer**: the "Total Spend" figure (e.g. `21.40 USD`) swaps to AUD on hover.
+Also works with **Star Citizen Hangar XPLORer**: the "Total Spend" figure (e.g. `686.40 USD`) swaps to AUD on hover.
 
 ---
 
@@ -127,7 +127,7 @@ From there you can switch it off or on, or remove it.
 | **A price on the site isn't converting** | Open an issue (see below) and include a screenshot and the page link. |
 
 ## How it works
-- `content.js` finds price text (such as `$49.50 USD`), wraps it in a two-layer element and pairs it with the separate `USD` label. `content.css` handles the slide animation.
+- `content.js` finds price text (such as `$49.50 USD` or `686.40 USD`), wraps it in a two-layer element and pairs it with the separate `USD` label. `content.css` handles the slide animation.
 - `background.js` fetches the USD→AUD rate from open.er-api.com (with frankfurter.app as a fallback), caches it for an hour and refreshes it hourly.
 - Rates are mid-market reference rates updated by the providers about once a day. Your card or PayPal's actual charge will differ because of bank fees and their own exchange margin. Treat the AUD price as a guide.
 
@@ -142,4 +142,3 @@ Pull requests are welcome. To work on it, load the folder as above, edit the fil
 
 ## License
 MIT, see [LICENSE](LICENSE).
-

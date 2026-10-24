@@ -37,9 +37,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 });
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
   chrome.alarms.create("refresh-rate", { periodInMinutes: 60 });
   getRate(true);
+  // Open the welcome tab on first install and after an update
+  if (details.reason === "install" || details.reason === "update") {
+    chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html?reason=" + details.reason) });
+  }
 });
 chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create("refresh-rate", { periodInMinutes: 60 });

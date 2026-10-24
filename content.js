@@ -8,9 +8,13 @@
 
   const audFmt = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
   const numFmt = new Intl.NumberFormat("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  let rate = null;
+  const REDUCED_MOTION = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const ANIM = { duration: 320, easing: "cubic-bezier(0.22, 1, 0.36, 1)" };
 
-  // ---------- rate handling ----------
+  let rate = null;
+  let permanent = false; // "always show AUD" setting (popup toggle)
+
+  // ---------- rate + settings ----------
   async function requestRate() {
     try {
       const res = await chrome.runtime.sendMessage({ type: "getRate" });
@@ -18,14 +22,32 @@
     } catch (_) { /* extension was reloaded; refreshing the page fixes it */ }
   }
 
+  const allPriceWraps = () => document.querySelectorAll(".rsi-aud-wrap:not(.rsi-aud-label)");
+
   function setRate(newRate) {
     if (newRate === rate) return;
     rate = newRate;
-    document.querySelectorAll(".rsi-aud-wrap:not(.rsi-aud-label)").forEach(renderAud);
+    allPriceWraps().forEach((w) => { renderAud(w); applyGroup(w._group, w._group.hover); });
   }
 
+  function setPermanent(value) {
+    if (permanent === value) return;
+    permanent = value;
+    const wraps = [...allPriceWraps()];
+    const animate = wraps.length <= 60; // don't animate hundreds of prices at once
+    wraps.forEach((w) => applyGroup(w._group, animate));
+  }
+
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== "local") return;
+      if (changes.rate && changes.rate.newValue) setRate(changes.rate.newValue);
+      if (changes.permanent) setPermanent(!!changes.permanent.newValue);
+    });
+  } catch (_) {}
+
   function renderAud(wrap) {
-    const layer = wrap.querySelector(".rsi-aud-aud");
+    const layer = wrap._audL;
     const usd = parseFloat(wrap.dataset.usd);
     if (!rate || isNaN(usd)) { layer.textContent = "…"; return; }
     const value = usd * rate;
@@ -42,21 +64,69 @@
     layer.textContent = text;
   }
 
-  try {
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (area === "local" && changes.rate && changes.rate.newValue) setRate(changes.rate.newValue);
-    });
-  } catch (_) {}
+  // ---------- showing USD vs AUD ----------
+  function inheritedDecoration(node) {
+    for (let a = node.parentElement; a; a = a.parentElement) {
+      const d = getComputedStyle(a).textDecorationLine;
+      if (d && d !== "none") return d;
+    }
+    return "";
+  }
 
-  // ---------- hover state (price and its USD label animate together) ----------
+  // Swap one wrapper between its USD layer and AUD layer, with a swipe-up animation
+  function swap(wrap, toAud, animate) {
+    if (wrap._view === toAud) return;
+    if (wrap._anims) wrap._anims.forEach((a) => a.cancel());
+    const usdL = wrap._usdL, audL = wrap._audL;
+    const inL = toAud ? audL : usdL;
+    const outL = toAud ? usdL : audL;
+    wrap._view = toAud;
+
+    const settle = () => {
+      wrap.classList.remove("rsi-animating");
+      wrap.style.clipPath = "";
+      wrap.style.textDecoration = "";
+      usdL.classList.remove("rsi-incoming");
+      audL.classList.remove("rsi-incoming");
+      wrap.classList.toggle("rsi-show-aud", toAud);
+      wrap._anims = null;
+    };
+
+    if (!animate || REDUCED_MOTION || !wrap.animate) { settle(); return; }
+
+    outL.classList.remove("rsi-incoming");
+    inL.classList.add("rsi-incoming");
+    const deco = inheritedDecoration(wrap); // inline-blocks don't inherit strike-through, so copy it
+    if (deco) wrap.style.textDecoration = deco;
+    wrap.classList.add("rsi-animating");
+    wrap.style.clipPath = "inset(-0.1em -400px)"; // clip top/bottom only
+    const a1 = outL.animate(
+      [{ transform: "translateY(0)", opacity: 1 }, { transform: "translateY(-100%)", opacity: 0 }], ANIM);
+    const a2 = inL.animate(
+      [{ transform: "translateY(100%)", opacity: 0 }, { transform: "translateY(0)", opacity: 1 }], ANIM);
+    wrap._anims = [a1, a2];
+    Promise.all([a1.finished, a2.finished]).then(() => {
+      if (wrap._anims && wrap._anims[0] === a1) { settle(); a1.cancel(); a2.cancel(); }
+    }).catch(() => {}); // cancelled by a newer swap
+  }
+
+  function wantAud(group) {
+    return rate != null && permanent !== group.hover; // permanent mode: hovering peeks at USD
+  }
+  function applyGroup(group, animate) {
+    const t = wantAud(group);
+    group.forEach((w) => swap(w, t, animate));
+  }
+
   function enter(group) {
     clearTimeout(group.timer);
-    group.forEach((w) => w.classList.add("rsi-active"));
+    group.hover = true;
+    applyGroup(group, true);
     requestRate(); // background script no-ops if the cached rate is fresh
   }
   function leave(group) {
     clearTimeout(group.timer);
-    group.timer = setTimeout(() => group.forEach((w) => w.classList.remove("rsi-active")), 40);
+    group.timer = setTimeout(() => { group.hover = false; applyGroup(group, true); }, 40);
   }
   function addHoverListeners(w) {
     w.addEventListener("mouseenter", () => enter(w._group));
@@ -88,36 +158,41 @@
     wrap.dataset.usd = String(usdValue);
     wrap.dataset.sym = hasSymbol ? "1" : "0";
     wrap.dataset.suffix = hasSuffix ? "1" : "0";
-    const usdLayer = el("rsi-aud-layer rsi-aud-usd");
-    const audLayer = el("rsi-aud-layer rsi-aud-aud");
-    audLayer.setAttribute("aria-hidden", "true");
+    const usdL = el("rsi-aud-layer rsi-aud-usd");
+    const audL = el("rsi-aud-layer rsi-aud-aud");
+    audL.setAttribute("aria-hidden", "true");
     textNode.parentNode.insertBefore(wrap, textNode);
-    usdLayer.appendChild(textNode); // move (not copy) so the site's own references stay valid
-    wrap.append(usdLayer, audLayer);
-    wrap._group = [wrap];
+    usdL.appendChild(textNode); // move (not copy) so the site's own references stay valid
+    wrap.append(usdL, audL);
+    wrap._usdL = usdL; wrap._audL = audL; wrap._view = false;
+    const group = [wrap];
+    group.hover = false;
+    wrap._group = group;
     addHoverListeners(wrap);
     renderAud(wrap);
+    applyGroup(group, false); // in "always AUD" mode, new prices appear already converted
     return wrap;
   }
 
   function buildLabelWrap(label) {
     const lw = el("rsi-aud-wrap rsi-aud-label");
-    const usdLayer = el("rsi-aud-layer rsi-aud-usd");
-    const audLayer = el("rsi-aud-layer rsi-aud-aud");
-    audLayer.setAttribute("aria-hidden", "true");
+    const usdL = el("rsi-aud-layer rsi-aud-usd");
+    const audL = el("rsi-aud-layer rsi-aud-aud");
+    audL.setAttribute("aria-hidden", "true");
     let node = label;
     if (node.nodeType === Node.TEXT_NODE) {
       node = isolate(node);
-      audLayer.textContent = "AUD";
+      audL.textContent = "AUD";
     } else {
       const clone = node.cloneNode(false); // keeps classes/styling (e.g. small caps)
       clone.removeAttribute("id");
       clone.textContent = "AUD";
-      audLayer.appendChild(clone);
+      audL.appendChild(clone);
     }
     node.parentNode.insertBefore(lw, node);
-    usdLayer.appendChild(node);
-    lw.append(usdLayer, audLayer);
+    usdL.appendChild(node);
+    lw.append(usdL, audL);
+    lw._usdL = usdL; lw._audL = audL; lw._view = false;
     return lw;
   }
 
@@ -129,6 +204,7 @@
     lw._group.push(lw);
     addHoverListeners(lw);
     renderAud(priceWrap);
+    swap(lw, priceWrap._view, false); // match whatever the price is showing right now
   }
 
   // ---------- pass 1: find price text ----------
@@ -153,31 +229,27 @@
     if (tail) wrapPrice(tail);
   }
 
-  // ---------- pass 2: find separate "USD" labels and pair them with the number before them ----------
-  function firstTextNode(root) {
-    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-      acceptNode: (n) => (n.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
-    });
-    return w.nextNode();
-  }
-
-  function findPriceBefore(label) {
-    let cur = label;
-    for (let i = 0; i < 4 && cur && cur !== document.body; i++) {
-      let p = cur.previousSibling;
-      while (p && p.nodeType === Node.TEXT_NODE && !p.nodeValue.trim()) p = p.previousSibling;
-      if (p) {
-        if (p.nodeType === Node.ELEMENT_NODE) {
-          const w = p.matches(".rsi-aud-wrap") ? p : p.querySelector(".rsi-aud-wrap:not(.rsi-aud-label)");
-          if (w && !w.classList.contains("rsi-aud-label")) {
-            const usdText = (w.querySelector(".rsi-aud-usd") || w).textContent.trim();
-            if (p.textContent.trim() === w.textContent.trim() || NUM_ONLY_RE.test(usdText)) return { wrap: w };
-          }
-        }
-        const t = p.textContent.trim();
-        return NUM_ONLY_RE.test(t) ? { node: p } : null;
-      }
-      cur = cur.parentNode;
+  // ---------- pass 2: pair separate "USD" labels with the price just before them ----------
+  // Walks backwards through the page's text, so it doesn't matter how the site nests its elements.
+  function findPriceBefore(startText, label) {
+    let limit = label.nodeType === Node.ELEMENT_NODE ? label : label.parentElement;
+    for (let i = 0; i < 4 && limit.parentElement && limit.parentElement !== document.body; i++) {
+      limit = limit.parentElement;
+    }
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    walker.currentNode = startText;
+    let t;
+    while ((t = walker.previousNode())) {
+      if (!limit.contains(t)) return null;
+      if (!t.nodeValue.trim()) continue;
+      const pe = t.parentElement;
+      if (!pe) return null;
+      if (pe.closest(".rsi-aud-aud")) continue;            // our own AUD text
+      if (SKIP_TAGS.has(pe.tagName)) continue;
+      if (pe.closest(".rsi-aud-label")) return null;       // previous thing was another label
+      const w = pe.closest(".rsi-aud-wrap");
+      if (w) return w.dataset.label === "1" || w.dataset.suffix === "1" ? null : { wrap: w };
+      return NUM_ONLY_RE.test(t.nodeValue.trim()) ? { node: t } : null;
     }
     return null;
   }
@@ -195,16 +267,12 @@
       const p = n.parentElement;
       if (p && p !== document.body && p.children.length === 0 && p.textContent.trim() === "USD") label = p;
 
-      const found = findPriceBefore(label);
+      const found = findPriceBefore(n, label);
       if (!found) continue;
-
       if (found.wrap) { link(found.wrap, label); continue; }
 
-      let tn = found.node.nodeType === Node.TEXT_NODE ? found.node : firstTextNode(found.node);
-      if (!tn) continue;
-      const t = tn.nodeValue.trim();
-      if (!NUM_ONLY_RE.test(t)) continue;
-      tn = isolate(tn);
+      const t = found.node.nodeValue.trim();
+      const tn = isolate(found.node);
       const wrap = buildPriceWrap(tn, parseFloat(t.replace(/[$,\s]/g, "")), t.includes("$"), false);
       link(wrap, label);
     }
@@ -249,30 +317,41 @@
   }
 
   function refreshWrapFromText(wrap) {
-    const text = (wrap.querySelector(".rsi-aud-usd") || wrap).textContent;
+    const text = wrap._usdL.textContent;
     const m = text.match(/(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?/);
     if (!m) return;
     wrap.dataset.usd = String(parseFloat(m[1].replace(/,/g, "") + "." + (m[2] || "0")));
     renderAud(wrap);
   }
 
-  new MutationObserver((mutations) => {
-    for (const mu of mutations) {
-      if (mu.type === "characterData") {
-        // The site updated a price we've already wrapped (e.g. total spend recalculated)
-        const w = mu.target.parentElement && mu.target.parentElement.closest(".rsi-aud-wrap:not(.rsi-aud-label)");
-        if (w && mu.target.parentElement.closest(".rsi-aud-usd")) refreshWrapFromText(w);
-        else enqueue(mu.target);
-      } else {
-        mu.addedNodes.forEach((n) => {
-          const host = n.nodeType === Node.ELEMENT_NODE ? n : n.parentElement;
-          if (host && host.closest(".rsi-aud-wrap")) return;
-          enqueue(n);
-        });
+  function observe() {
+    new MutationObserver((mutations) => {
+      for (const mu of mutations) {
+        if (mu.type === "characterData") {
+          // The site updated a price we've already wrapped (e.g. a total was recalculated)
+          const pe = mu.target.parentElement;
+          const w = pe && pe.closest(".rsi-aud-wrap:not(.rsi-aud-label)");
+          if (w && pe.closest(".rsi-aud-usd")) refreshWrapFromText(w);
+          else enqueue(mu.target);
+        } else {
+          mu.addedNodes.forEach((n) => {
+            const host = n.nodeType === Node.ELEMENT_NODE ? n : n.parentElement;
+            if (host && host.closest(".rsi-aud-wrap")) return;
+            enqueue(n);
+          });
+        }
       }
-    }
-  }).observe(document.body, { childList: true, subtree: true, characterData: true });
+    }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  }
 
-  scan(document.body);
-  requestRate();
+  async function init() {
+    try {
+      const s = await chrome.storage.local.get("permanent");
+      permanent = !!s.permanent;
+    } catch (_) {}
+    observe();
+    scan(document.body);
+    requestRate();
+  }
+  init();
 })();

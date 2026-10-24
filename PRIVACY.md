@@ -11,4 +11,4 @@ RSI AUDifier does not collect, store, transmit or sell any personal information.
 
 RSI AUDifier is an unofficial fan project and is not affiliated with Cloud Imperium Games or Roberts Space Industries.
 
-Contact: <YOUR EMAIL OR GITHUB ISSUES URL>
+Contact: https://github.com/Hooroo-mp4/RSI-AUDifier/issues

@@ -8,6 +8,10 @@
   "use strict";
   const STYLE_ID = "utilify-theme-css";
   const VERSION = chrome.runtime.getManifest().version;
+  // Bump BUILD whenever the recolouring logic changes. Saved results and saved "leave this image alone"
+  // decisions are only trusted for the same VERSION + BUILD, so they can never outlive the code that made them.
+  const BUILD = "3";
+  const REV = VERSION + "." + BUILD;
   const HUE_MIN = 185, HUE_MAX = 232, SAT_MIN = 0.1; // what counts as "RSI blue"
   const ACCENT_MIN_SAT = 0.75, ACCENT_MIN_LIGHT = 0.4; // bright + saturated blue = accent, the rest = base
   const MIN_RULES_TO_TRUST = 10;                     // fewer than this means RSI's CSS hasn't loaded yet
@@ -32,12 +36,17 @@
   const MAX_IMG_FETCHES = 40;             // per page load
   const MAX_IMG_BYTES = 8 * 1024 * 1024;  // skip bigger source files
   const MAX_DATA_URL_BYTES = 400 * 1024;  // skip bigger inline data: images
-  const MAX_PIXELS = 12e6;                // skip bigger bitmaps (a 4K background is 8.3 million)
-  const MAX_DATA_CHARS = 14e6;            // skip results bigger than this
+  const MAX_PIXELS = 40e6;                // skip bigger bitmaps (a 4K background is 8.3 million)
+  const MAX_OUT_PIXELS = 16e6;            // bigger ones are recoloured at a slightly reduced size to keep memory sensible
   const TOTAL_CACHE_CHARS = 30e6;         // keep the saved copy of all recoloured images under this
   const IMG_HUE_MIN = 165, IMG_HUE_MAX = 240; // images judged "blue decoration" use a wider blue range than CSS colours
+  // Chromium rejects a CSS variable whose value is over 2 MB (the image would silently fall back to the
+  // original blue one), so every recoloured image is compressed to fit comfortably under that.
+  const MAX_VAR_CHARS = 1.9e6;
   const imgDone = new Map();              // id -> recoloured data: URL (for the current theme)
   const imgSkip = new Set();              // ids that aren't blue decoration (photos, greys) or can't be handled
+  const imgReport = new Map();            // id -> { url, status, detail } shown in the popup so problems can be diagnosed
+  const skipInfo = new Map();             // id -> [url, reason] for the persisted skip list
   const imgFailed = new Set();            // ids we couldn't download this session
   const imgPending = new Map();           // id -> absolute url, found while building and not processed yet
   let imgStyleEl = null;
@@ -295,68 +304,127 @@
     return changed ? text : null;
   }
 
-  // Rasters (PNG/JPEG/WebP) are recoloured pixel by pixel, but only if their colour is overwhelmingly
-  // RSI blue; photos and greyscale textures are left exactly as they are.
-  async function recolorRaster(buf, type, T) {
-    const bmp = await createImageBitmap(new Blob([buf], { type: type || "image/png" }));
-    const w = bmp.width, h = bmp.height;
-    if (!w || !h || w * h > MAX_PIXELS) { if (bmp.close) bmp.close(); return null; }
-    const cv = document.createElement("canvas");
-    cv.width = w; cv.height = h;
-    const ctx = cv.getContext("2d", { willReadFrequently: true });
-    ctx.drawImage(bmp, 0, 0);
-    if (bmp.close) bmp.close();
-    const img = ctx.getImageData(0, 0, w, h);
-    const px = new Uint32Array(img.data.buffer); // little-endian: 0xAABBGGRR
+  // toBlob() encodes off the main thread (toDataURL() freezes the page for a second or more on a 4K image)
+  const toBlob = (c, type, q) => new Promise((res) => c.toBlob(res, type, q));
+  const blobToDataUrl = (b) => new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(b); });
+  const yieldToPage = () => new Promise((r) => setTimeout(r, 0));
+  const dataChars = (blob) => Math.ceil((blob.size * 4) / 3) + 40;
 
-    // Faint pixels count too: glows are often a vivid colour at 5-10% opacity
-    let visible = 0, chroma = 0, blue = 0;
-    const step = Math.max(1, Math.floor(px.length / 40000));
-    for (let i = 0; i < px.length; i += step) {
-      const p = px[i];
-      if ((p >>> 24) < 3) continue;
-      visible++;
-      const [hh, ss] = rgbToHsl(p & 255, (p >>> 8) & 255, (p >>> 16) & 255);
-      if (ss >= SAT_MIN) { chroma++; if (hh >= IMG_HUE_MIN && hh <= IMG_HUE_MAX) blue++; }
+  // Encode to the smallest practical file under `limit` characters: lossless PNG if it fits, otherwise
+  // high-quality WebP (which keeps transparency), and as a last resort a slightly smaller bitmap.
+  async function encodeWithin(cv, limit) {
+    let best = null;
+    if (cv.width * cv.height <= 4e6) { // lossless PNG is only worth trying on smaller images (it's very slow on big ones)
+      best = await toBlob(cv, "image/png");
+      if (best && dataChars(best) <= Math.min(limit, 1.5e6)) return blobToDataUrl(best);
     }
-    if (!visible || chroma < visible * 0.01 || blue < chroma * 0.75) return null; // not blue decoration
-
-    const memo = new Map();
-    for (let i = 0; i < px.length; i++) {
-      const p = px[i];
-      if ((p >>> 24) === 0) continue;
-      const key = p & 0xffffff;
-      let out = memo.get(key);
-      if (out === undefined) {
-        const s = shiftRgb(key & 255, (key >>> 8) & 255, (key >>> 16) & 255, T, true);
-        out = s ? (s[0] | (s[1] << 8) | (s[2] << 16)) : -1;
-        memo.set(key, out);
-      }
-      if (out !== -1) px[i] = (p & 0xff000000) | out;
+    for (const q of cv.width * cv.height > 4e6 ? [0.85, 0.7, 0.55] : [0.92, 0.82, 0.7, 0.55]) { // big images: don't waste time on the top quality
+      const w = await toBlob(cv, "image/webp", q);
+      if (w && w.type === "image/webp" && (!best || w.size < best.size)) best = w;
+      if (best && dataChars(best) <= limit) return blobToDataUrl(best);
     }
-    ctx.putImageData(img, 0, 0);
-    let out = cv.toDataURL("image/png");
-    if (out.length > 1.5e6) { // big result: a high-quality WebP is far smaller than the PNG
-      const webp = cv.toDataURL("image/webp", 0.92);
-      if (webp.startsWith("data:image/webp") && webp.length < out.length * 0.7) out = webp;
+    for (let scale = 0.8; scale >= 0.3; scale *= 0.8) {
+      const c2 = document.createElement("canvas");
+      c2.width = Math.max(1, Math.round(cv.width * scale)); c2.height = Math.max(1, Math.round(cv.height * scale));
+      c2.getContext("2d").drawImage(cv, 0, 0, c2.width, c2.height);
+      const w = await toBlob(c2, "image/webp", 0.8);
+      if (w && w.type === "image/webp" && dataChars(w) <= limit) return blobToDataUrl(w);
     }
-    return out;
+    return null;
   }
 
-  // -> { data } recoloured, { skip: true } not worth recolouring, or null if the download failed
+  // Rasters (PNG/JPEG/WebP) are recoloured pixel by pixel, but only if their colour is overwhelmingly
+  // RSI blue; photos and greyscale textures are left exactly as they are.
+  // Big images are handled in horizontal bands so no single step freezes the page.
+  // -> { data } | { skip: reason } | { fail: reason }
+  async function recolorRaster(buf, type, T) {
+    let bmp;
+    try { bmp = await createImageBitmap(new Blob([buf], { type: type || "image/png" })); }
+    catch (_) { return { fail: "the browser couldn't decode the image" }; }
+    try {
+      const w = bmp.width, h = bmp.height;
+      if (!w || !h || w * h > MAX_PIXELS) return { skip: "image is very large (" + w + "x" + h + ")" };
+
+      // 1. Is it blue decoration? Judge a small nearest-neighbour copy (real pixel colours, no blending).
+      // Faint pixels count too: glows are often a vivid colour at 5-10% opacity.
+      const sw = Math.min(w, 480), sh = Math.max(1, Math.min(h, Math.round((480 * h) / w)));
+      const small = document.createElement("canvas");
+      small.width = sw; small.height = sh;
+      const sctx = small.getContext("2d", { willReadFrequently: true });
+      sctx.imageSmoothingEnabled = false;
+      sctx.drawImage(bmp, 0, 0, sw, sh);
+      const sp = new Uint32Array(sctx.getImageData(0, 0, sw, sh).data.buffer);
+      let visible = 0, chroma = 0, blue = 0;
+      for (let i = 0; i < sp.length; i++) {
+        const p = sp[i];
+        if ((p >>> 24) < 3) continue;
+        visible++;
+        const [hh, ss] = rgbToHsl(p & 255, (p >>> 8) & 255, (p >>> 16) & 255);
+        if (ss >= SAT_MIN) { chroma++; if (hh >= IMG_HUE_MIN && hh <= IMG_HUE_MAX) blue++; }
+      }
+      const pct = (n, d) => Math.round((100 * n) / Math.max(d, 1));
+      // keep:true = a decision about the image's own content, safe to remember. Limits (size etc.) are never remembered.
+      if (!visible) return { skip: "the image is empty/transparent", keep: true };
+      if (chroma < visible * 0.01) return { skip: "it has almost no colour (grey texture)", keep: true };
+      if (blue < chroma * 0.75) return { skip: "not mostly RSI-blue: only " + pct(blue, chroma) + "% of its coloured pixels are blue (photos are left alone)", keep: true };
+
+      // 2. Recolour it band by band (very big images are shrunk a little first; they're only decoration)
+      const scale = w * h > MAX_OUT_PIXELS ? Math.sqrt(MAX_OUT_PIXELS / (w * h)) : 1;
+      const ow = Math.max(1, Math.round(w * scale)), oh = Math.max(1, Math.round(h * scale));
+      const out = document.createElement("canvas");
+      out.width = ow; out.height = oh;
+      const octx = out.getContext("2d");
+      const band = document.createElement("canvas");
+      const bctx = band.getContext("2d", { willReadFrequently: true });
+      const bandH = Math.max(16, Math.floor(3e5 / ow));
+      // A fixed-size direct-mapped cache of colour -> recoloured colour (much faster than a Map for noisy images)
+      const CACHE = 1 << 20;
+      const ckey = new Int32Array(CACHE).fill(-1), cval = new Int32Array(CACHE);
+      const t0 = performance.now();
+      for (let y0 = 0; y0 < oh; y0 += bandH) {
+        const bh = Math.min(bandH, oh - y0);
+        band.width = ow; band.height = bh; // resizing also clears it
+        bctx.drawImage(bmp, 0, y0 / scale, w, bh / scale, 0, 0, ow, bh);
+        const img = bctx.getImageData(0, 0, ow, bh);
+        const px = new Uint32Array(img.data.buffer); // little-endian: 0xAABBGGRR
+        for (let i = 0; i < px.length; i++) {
+          const p = px[i];
+          if ((p >>> 24) === 0) continue;
+          const key = p & 0xffffff;
+          const slot = Math.imul(key, 2654435761) >>> 12;
+          let o;
+          if (ckey[slot] === key) o = cval[slot];
+          else {
+            const r = shiftRgb(key & 255, (key >>> 8) & 255, (key >>> 16) & 255, T, true);
+            o = r ? (r[0] | (r[1] << 8) | (r[2] << 16)) : -1;
+            ckey[slot] = key; cval[slot] = o;
+          }
+          if (o !== -1) px[i] = (p & 0xff000000) | o;
+        }
+        octx.putImageData(img, 0, y0);
+        await yieldToPage(); // let the page run between bands
+      }
+      const t1 = performance.now();
+      const data = await encodeWithin(out, MAX_VAR_CHARS);
+      const secs = ((t1 - t0) / 1000).toFixed(1) + "s recolouring + " + ((performance.now() - t1) / 1000).toFixed(1);
+      return data ? { data, size: w + "x" + h + (scale < 1 ? " (recoloured at " + ow + "x" + oh + ")" : "") + ", took " + secs + "s" } : { skip: "the recoloured image was too large for the browser even after compression" };
+    } finally { if (bmp.close) bmp.close(); }
+  }
+
+  // -> { data, detail } recoloured | { skip: reason } not worth recolouring | { fail: reason } couldn't
   async function recolorImage(url, T) {
     const got = await fetchBytes(url);
-    if (!got) return null;
-    if (got.skip) return { skip: true };
+    if (!got) return { fail: "couldn't download it" };
+    if (got.skip) return { skip: "the file is too large" };
     const isSvg = /svg/i.test(got.type) || (!url.startsWith("data:") && /\.svg$/i.test(new URL(url).pathname));
-    let data = null;
     if (isSvg) {
       const text = recolorSvg(new TextDecoder().decode(got.buf), T);
-      if (text) data = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(text);
-    } else {
-      data = await recolorRaster(got.buf, got.type, T);
+      if (!text) return { skip: "the SVG has no RSI-blue colours in it", keep: true };
+      const data = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(text);
+      return data.length <= MAX_VAR_CHARS ? { data, detail: "SVG" } : { skip: "the SVG is too large" };
     }
-    return data && data.length <= MAX_DATA_CHARS ? { data } : { skip: true };
+    const r = await recolorRaster(got.buf, got.type, T);
+    return r.data ? { data: r.data, detail: r.size + (r.data.startsWith("data:image/webp") ? ", saved as WebP" : "") } : r;
   }
 
   function renderImgStyle() {
@@ -371,11 +439,31 @@
     imgStyleEl.textContent = css + "}";
   }
 
+  const shortUrl = (u) => {
+    if (u.startsWith("data:")) return "inline image (" + Math.round(u.length / 1024) + " KB)";
+    try { return new URL(u).pathname.split("/").slice(-3).join("/"); } catch (_) { return u.slice(0, 60); }
+  };
+  const report = (id, url, status, detail) => imgReport.set(id, { url: shortUrl(url), status, detail: detail || "" });
+
+  function verifyImgVars() { // -> true if something had to be removed
+    const root = getComputedStyle(document.documentElement);
+    let removed = false;
+    imgDone.forEach((data, id) => {
+      if (!root.getPropertyValue("--utl-i-" + id)) { // the browser refused it
+        imgDone.delete(id); removed = true;
+        const r = imgReport.get(id);
+        imgReport.set(id, { url: r ? r.url : id, status: "failed", detail: "the browser rejected the recoloured image (too large)" });
+      }
+    });
+    return removed;
+  }
+
   function persistImgs() {
     try {
       let total = 0;
       imgDone.forEach((d) => { total += d.length; });
-      const rec = { themeImgSkip: [...imgSkip] };
+      // "skip" decisions are remembered only for this version of the extension, so an update re-examines them
+      const rec = { themeImgSkip: { v: REV, items: Object.fromEntries(skipInfo) } };
       if (total <= TOTAL_CACHE_CHARS) rec.themeImg = { key: keyOf(theme), items: Object.fromEntries(imgDone) };
       chrome.storage.local.set(rec);
     } catch (_) {}
@@ -390,17 +478,22 @@
       for (const [id, url] of [...imgPending]) {
         imgPending.delete(id);
         if (imgDone.has(id) || imgSkip.has(id) || imgFailed.has(id)) continue;
-        if (imgFetches++ >= MAX_IMG_FETCHES) break;
-        let res = null;
-        try { res = await recolorImage(url, theme); } catch (_) { res = { skip: true }; }
+        if (imgFetches++ >= MAX_IMG_FETCHES) { report(id, url, "not processed", "too many images on this page"); break; }
+        report(id, url, "working", "");
+        let res;
+        try { res = await recolorImage(url, theme); } catch (e) { res = { fail: "unexpected error: " + (e && e.message) }; }
         if (keyOf(theme) !== startKey) return; // theme changed while we were working: start over
-        if (!res) imgFailed.add(id);
-        else if (res.skip) imgSkip.add(id);
-        else imgDone.set(id, res.data);
+        if (res.data) { imgDone.set(id, res.data); report(id, url, "recoloured", res.detail); }
+        else if (res.skip) {
+          if (res.keep) { imgSkip.add(id); skipInfo.set(id, [shortUrl(url), res.skip]); } // about the image itself: remember it
+          else imgFailed.add(id);                                                          // a limit: just not again this visit
+          report(id, url, "left alone", res.skip);
+        }
+        else { imgFailed.add(id); report(id, url, "failed", res.fail); } // not remembered: tried again next time
         progressed = true;
       }
     } finally { imgWorking = false; }
-    if (progressed) { renderImgStyle(); persistImgs(); schedule(0); }
+    if (progressed) { renderImgStyle(); if (verifyImgVars()) renderImgStyle(); persistImgs(); schedule(0); }
   }
 
   // ---------- big background layers, read from the page itself ----------
@@ -532,7 +625,7 @@
     imgDone.clear(); imgPending.clear(); renderImgStyle();
   }
 
-  const keyOf = (T) => VERSION + "|" + JSON.stringify(T);
+  const keyOf = (T) => REV + "|" + JSON.stringify(T);
 
   function rebuild() {
     timer = null;
@@ -585,7 +678,10 @@
     let s = {};
     try { s = await chrome.storage.local.get(["theme", "themeCss", "themeImg", "themeImgSkip"]); } catch (_) {}
     theme = utilifyNormalizeTheme(s.theme);
-    (s.themeImgSkip || []).forEach((id) => imgSkip.add(id));
+    const sk = s.themeImgSkip;
+    if (sk && !Array.isArray(sk) && sk.v === REV && sk.items) { // skip lists from older code are ignored
+      Object.entries(sk.items).forEach(([id, info]) => { imgSkip.add(id); skipInfo.set(id, info); imgReport.set(id, { url: info[0], status: "left alone", detail: info[1] }); });
+    }
     if (!utilifyThemeIsDefault(theme) && s.themeCss && s.themeCss.key === keyOf(theme)) {
       cachedCss = s.themeCss.css;
       (s.themeCss.inline || []).forEach((k) => knownInline.add(k));
@@ -593,17 +689,24 @@
       injectedFromCache = true;
     }
     if (!utilifyThemeIsDefault(theme) && s.themeImg && s.themeImg.key === keyOf(theme)) {
-      Object.entries(s.themeImg.items || {}).forEach(([id, d]) => imgDone.set(id, d)); // recoloured images, also before first paint
+      Object.entries(s.themeImg.items || {}).forEach(([id, d]) => { imgDone.set(id, d); imgReport.set(id, { url: "(remembered from an earlier visit)", status: "recoloured", detail: Math.round(d.length / 1024) + " KB" }); }); // also before first paint
       renderImgStyle();
     }
     watchStylesheets();
     schedule(0);
 
+    // The popup asks for this to show what happened to each background image on the open page
+    chrome.runtime.onMessage.addListener((msg, _sender, send) => {
+      if (msg && msg.type === "utilImgReport") {
+        send({ version: VERSION, theme: theme.id, page: location.pathname, items: [...imgReport.values()] });
+      }
+    });
+
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== "local" || !changes.theme) return;
       theme = utilifyNormalizeTheme(changes.theme.newValue);
       cachedCss = ""; injectedFromCache = false;
-      imgDone.clear(); imgPending.clear(); imgFailed.clear(); imgFetches = 0; renderImgStyle(); // images are recoloured per theme
+      imgDone.clear(); imgPending.clear(); imgFailed.clear(); imgFetches = 0; imgReport.clear(); renderImgStyle(); // images are recoloured per theme
       schedule(0); // popup changed the theme: apply right away
     });
   }

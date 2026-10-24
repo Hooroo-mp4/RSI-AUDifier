@@ -198,3 +198,39 @@ $("permanent").addEventListener("change", (e) => chrome.storage.local.set({ perm
     } catch (_) {}
   }
 })();
+
+// ---------- background image report (for the RSI tab you're looking at) ----------
+async function loadImgReport() {
+  let tab = null;
+  try {
+    const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (active && /^https:\/\/robertsspaceindustries\.com\//.test(active.url || "")) tab = active;
+    else { const all = await chrome.tabs.query({ url: "https://robertsspaceindustries.com/*" }); tab = all[all.length - 1] || null; }
+  } catch (_) {}
+  if (!tab) return;
+  let rep = null;
+  try { rep = await chrome.tabs.sendMessage(tab.id, { type: "utilImgReport" }); } catch (_) {}
+  if (!rep || !rep.items || !rep.items.length) return;
+
+  const count = (st) => rep.items.filter((i) => i.status === st).length;
+  const done = count("recoloured"), left = count("left alone"), bad = rep.items.filter((i) => i.status === "failed" || i.status === "not processed").length;
+  $("imgSummary").textContent = "Background images on this page: " + done + " recoloured" + (left ? ", " + left + " left alone" : "") + (bad ? ", " + bad + " couldn't be done" : "");
+  $("imgSummary").classList.toggle("warn", bad > 0);
+  const list = $("imgList");
+  list.textContent = "";
+  rep.items.forEach((i) => {
+    const li = document.createElement("li");
+    const st = document.createElement("span"); st.className = "st " + (i.status === "recoloured" ? "ok" : i.status === "left alone" ? "" : "bad"); st.textContent = i.status;
+    const url = document.createElement("span"); url.className = "url"; url.textContent = i.url;
+    li.append(st, url, document.createTextNode(i.detail || ""));
+    list.appendChild(li);
+  });
+  $("imgDetails").hidden = false;
+  $("imgCopy").addEventListener("click", async () => {
+    const text = "RSI Utilify " + rep.version + " | theme: " + rep.theme + " | page: " + rep.page + "\n" +
+      rep.items.map((i) => "- " + i.status + ": " + i.url + (i.detail ? " (" + i.detail + ")" : "")).join("\n");
+    try { await navigator.clipboard.writeText(text); $("imgCopy").textContent = "Copied!"; } catch (_) { $("imgCopy").textContent = "Couldn't copy"; }
+    setTimeout(() => { $("imgCopy").textContent = "Copy report"; }, 1500);
+  });
+}
+loadImgReport();

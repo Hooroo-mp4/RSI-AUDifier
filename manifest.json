@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "RSI AUDifier",
-  "version": "0.3.1",
-  "description": "Hover over a USD price on the Roberts Space Industries store to see it in AUD, converted at the current exchange rate.",
+  "name": "Utilify",
+  "version": "0.4.0",
+  "description": "Handy tools for the RSI website: see prices in your own currency and recolour the site with custom themes.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -25,16 +25,26 @@
         "https://robertsspaceindustries.com/*"
       ],
       "js": [
-        "content.js"
+        "themes.js",
+        "theme.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://robertsspaceindustries.com/*"
+      ],
+      "js": [
+        "currency.js"
       ],
       "css": [
-        "content.css"
+        "currency.css"
       ],
       "run_at": "document_idle"
     }
   ],
   "action": {
-    "default_title": "RSI AUDifier",
+    "default_title": "Utilify",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",

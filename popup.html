@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>RSI AUDifier</title>
+  <title>Utilify</title>
   <link rel="stylesheet" href="ui.css">
   <link rel="stylesheet" href="popup.css">
 </head>
@@ -10,15 +10,17 @@
   <header>
     <img class="logo" src="icons/icon48.png" alt="" width="32" height="32">
     <div>
-      <div class="name">RSI AUDifier</div>
+      <div class="name">Utilify</div>
       <div class="ver" id="version"></div>
     </div>
   </header>
 
   <section>
+    <h2>Currency converter</h2>
+
     <label class="row" for="permanent">
       <span>
-        <span class="label">Always show AUD</span>
+        <span class="label">Always show converted prices</span>
         <span class="desc">Convert every price without hovering. Hover a price to peek at the USD.</span>
       </span>
       <span class="switch">
@@ -26,12 +28,43 @@
         <span class="slider"></span>
       </span>
     </label>
+
+    <div class="field">
+      <span class="fieldLabel" id="curLabel">Convert prices to</span>
+      <button type="button" class="select" id="curBtn" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="curLabel curText">
+        <span id="curText">AUD</span>
+        <span class="chev" aria-hidden="true">▾</span>
+      </button>
+      <div class="panel" id="curPanel" hidden>
+        <input type="search" id="curSearch" placeholder="Search currencies (e.g. yen, CAD)" autocomplete="off" spellcheck="false" aria-controls="curList">
+        <ul id="curList" role="listbox" aria-labelledby="curLabel"></ul>
+        <div class="empty" id="curEmpty" hidden>No currencies match.</div>
+      </div>
+    </div>
     <div class="rate" id="rate">Loading exchange rate…</div>
+  </section>
+
+  <section>
+    <h2>Website theme</h2>
+    <div class="swatches" id="swatches" role="radiogroup" aria-label="Theme presets"></div>
+    <div class="sliders">
+      <label>
+        <span>Hue</span>
+        <input type="range" id="hue" min="0" max="359" step="1" aria-label="Custom hue">
+      </label>
+      <label>
+        <span>Colourfulness</span>
+        <input type="range" id="sat" min="0" max="150" step="5" aria-label="Custom colourfulness">
+      </label>
+    </div>
+    <div class="hint" id="themeName">Recolours RSI's blue. Applies instantly to open RSI tabs.</div>
   </section>
 
   <footer>
     Prices aren't always exact and can be off by around a dollar. Some companies, like PayPal, also charge a currency conversion fee.
   </footer>
+
+  <script src="themes.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

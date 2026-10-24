@@ -1,17 +1,26 @@
-# RSI AUDifier
+# Utilify
 
-A small browser extension for the [Roberts Space Industries](https://robertsspaceindustries.com) store.
-Hover over a USD price and it swipes up and away, replaced by the price in **AUD** at the current exchange rate (the `USD` label flips to `AUD` too). Move your mouse away and it slides back to USD.
+A small browser extension with handy tools for the [Roberts Space Industries](https://robertsspaceindustries.com) website.
 
 > Unofficial fan project. Not affiliated with Cloud Imperium Games or Roberts Space Industries.
 
 ## Features
-- Smooth swipe-up animation from USD to AUD, and back again when you move the mouse away
-- Click the extension icon for a settings menu with an **Always show AUD** toggle (every price converts without hovering; hover a price to peek at the USD)
-- A welcome tab opens after installing or updating
-- Exchange rate is fetched automatically and refreshed hourly
-- Works on the RSI store, pledge pages, and account pages
-- No data collected, no tracking, no accounts (see [PRIVACY.md](PRIVACY.md))
+
+### Currency converter
+- Hover over a USD price and it swipes up and away, replaced by the price in **your currency** at the current exchange rate. Move the mouse away and it slides back to USD.
+- The `USD` label flips to your currency code too, and a crossed-out old price flips along with the current price.
+- Pick **any currency** from a searchable list (default: AUD). USD, EUR and GBP are not offered.
+- Optional **Always show converted prices** mode: every price is converted without hovering (hover one to peek at the USD).
+
+### Website themes
+- Recolour RSI's blue with one click: RSI Blue (default), Teal, Emerald, Amber, Crimson, Magenta, Violet or Graphite.
+- Or make your own with the **Hue** and **Colourfulness** sliders.
+- Only RSI's blues change. Sale prices, errors and the orange checkout buttons keep their colours.
+- Changes apply instantly to every open RSI tab.
+
+### Also
+- Works with **Star Citizen Hangar XPLORer**: the "Total Spend" figure (e.g. `686.40 USD`) converts on hover too.
+- No accounts, no tracking, no data collected (see [PRIVACY.md](PRIVACY.md)).
 
 ## Compatibility
 | Browser | Supported |
@@ -22,17 +31,15 @@ Hover over a USD price and it swipes up and away, replaced by the price in **AUD
 | Brave | ✅ |
 | Firefox | ❌ not supported |
 
-Also works with **Star Citizen Hangar XPLORer**: the "Total Spend" figure (e.g. `686.40 USD`) swaps to AUD on hover.
-
 ---
 
 ## Installation (manual / developer mode)
 
-Until the extension is on a browser store, you install it by loading the folder yourself. It takes about a minute.
+Until Utilify is on a browser store, you install it by loading the folder yourself. It takes about a minute.
 
 ### Step 1: Download
 1. On this GitHub page click the green **Code** button, then **Download ZIP**.
-   (Or download `RSI-AUDifier.zip` from the Releases page if there is one.)
+   (Or download `Utilify.zip` from the Releases page.)
 2. Save it somewhere you'll remember, like your Downloads folder.
 
 ### Step 2: Unzip it
@@ -53,14 +60,15 @@ Open the unzipped folder. You should see these files inside:
 ```
 manifest.json
 background.js
-content.js
-content.css
+currency.js
+theme.js
+popup.html
 icons/
 README.md
 ...
 ```
 
-The folder that **directly contains `manifest.json`** is the one you need. Sometimes unzipping creates a folder inside a folder (for example `RSI-AUDifier` → `RSI-AUDifier`). If you open the first one and see only another folder, that inner one is the right one.
+The folder that **directly contains `manifest.json`** is the one you need. Sometimes unzipping creates a folder inside a folder (for example `Utilify` → `Utilify`). If you open the first one and see only another folder, that inner one is the right one.
 
 ### Step 5: Load it into your browser
 Pick your browser below.
@@ -92,22 +100,24 @@ Pick your browser below.
 
 ### Step 6: Check it worked
 - A **welcome tab** should open saying "Thanks for downloading!" and showing your version number.
-- **RSI AUDifier** should now appear in your extensions list, switched **on**.
-- The extension runs by itself. Click its icon (pin it from the puzzle-piece / cube menu) to open the settings menu.
-- Open any RSI store page, for example the [First Flight Pack](https://robertsspaceindustries.com/en/pledge/Packages/Star-Citizen-First-Flight-Pack), and **hover over a price**. It should swipe up and show the AUD amount.
+- **Utilify** should appear in your extensions list, switched **on**.
+- Click the Utilify icon (pin it from the puzzle-piece / cube menu) to open the settings menu.
+- Open any RSI store page, for example the [First Flight Pack](https://robertsspaceindustries.com/en/pledge/Packages/Star-Citizen-First-Flight-Pack), and **hover over a price**. It should swipe up and show the converted amount.
 
-> If you had the RSI page open while installing, refresh it (`F5`) once.
+> If you had an RSI page open while installing, refresh it (`F5`) once.
 
 ---
 
 ## Settings
-Click the **RSI AUDifier icon** in your browser toolbar (if you can't see it, open the puzzle-piece icon in Chrome/Edge/Brave or the cube icon in Opera and pin it).
+Click the **Utilify icon** in your browser toolbar. If you can't see it, open the puzzle-piece icon in Chrome/Edge/Brave or the cube icon in Opera and pin it.
 
 | Setting | What it does |
 |---|---|
-| **Always show AUD** | Converts every price on the page without needing to hover. Hover a price to peek at the original USD. |
+| **Always show converted prices** | Converts every price on the page without hovering. Hover a price to peek at the original USD. |
+| **Convert prices to** | Pick your currency. Type in the search box to filter (try `yen`, `CAD` or `swiss`). Defaults to AUD. |
+| **Website theme** | Pick a preset colour, or drag **Hue** / **Colourfulness** to make your own. Choose the first (blue) swatch to go back to RSI's normal look. |
 
-The menu also shows the exchange rate currently in use and when it was last updated.
+The menu also shows the exchange rate in use and the time it was last fetched.
 
 ## Where to find the extension afterwards
 
@@ -123,7 +133,7 @@ From there you can switch it off or on, or remove it.
 ## Updating
 1. Download and unzip the new version.
 2. Replace the old files in your folder with the new ones (or point **Load unpacked** at the new folder after removing the old one).
-3. Open your browser's extensions page and click the **reload** icon (circular arrow) on RSI AUDifier.
+3. Open your browser's extensions page and click the **reload** icon (circular arrow) on Utilify.
 4. Refresh any open RSI tabs.
 
 (Reloading an unpacked extension also opens the welcome tab again. That's normal.)
@@ -135,17 +145,21 @@ From there you can switch it off or on, or remove it.
 | **"Manifest file is missing or unreadable"** | You selected the wrong folder. Select the one that directly contains `manifest.json` (see Step 4). |
 | **I don't see a "Load unpacked" button** | Turn on **Developer mode** first. |
 | **Extension disappeared after restarting the browser or moving a folder** | The browser lost the folder. Don't move or delete it after loading. Load it again from its location. |
-| **I can't find the settings menu** | Pin the extension: click the puzzle-piece icon (cube icon in Opera) and pin **RSI AUDifier**. |
+| **I can't find the settings menu** | Pin the extension: click the puzzle-piece icon (cube icon in Opera) and pin **Utilify**. |
 | **Prices don't swap when I hover** | Refresh the RSI page. Check the extension is switched on. |
-| **AUD price shows "…"** | The exchange rate hasn't loaded. Check your internet connection, then refresh. |
+| **Price shows "…"** | The exchange rate hasn't loaded. Check your internet connection, then refresh. |
+| **My currency isn't in the list** | The list comes from the live exchange-rate provider, so a few very obscure currencies may be missing. USD, EUR and GBP are left out on purpose. |
+| **Theme doesn't change everything** | Utilify recolours RSI's blue palette, so some images, videos and a few older pages with their own styling may stay as they are. Open an issue with a screenshot and the page link. |
+| **Page flashes blue for a moment after changing theme** | Only the very first load after picking a new theme. It's remembered after that. |
 | **Opera shows a warning about developer-mode extensions** | This is normal for extensions loaded manually. |
 | **A price on the site isn't converting** | Open an issue (see below) and include a screenshot and the page link. |
 
 ## How it works
-- `content.js` finds price text (such as `$49.50 USD` or `686.40 USD`), wraps it in a two-layer element and pairs it with the separate `USD` label. `content.css` handles the slide animation.
+- `currency.js` finds price text (such as `$49.50 USD` or `686.40 USD`), wraps it in a two-layer element and pairs it with the separate `USD` label. `currency.css` handles the slide animation.
+- `theme.js` reads RSI's own stylesheets, finds every blue colour and writes override rules with the hue shifted. `themes.js` holds the presets.
+- `background.js` fetches USD exchange rates for every currency from open.er-api.com (with frankfurter.app as a fallback), caches them for an hour and refreshes them hourly.
 - `popup.html` / `popup.js` is the settings menu and `welcome.html` is the tab shown after install/update.
-- `background.js` fetches the USD→AUD rate from open.er-api.com (with frankfurter.app as a fallback), caches it for an hour and refreshes it hourly.
-- Rates are mid-market reference rates updated by the providers about once a day. Your card or PayPal's actual charge will differ because of bank fees and their own exchange margin. Treat the AUD price as a guide.
+- Rates are mid-market reference rates updated by the providers about once a day. Your card or PayPal's actual charge will differ because of bank fees and their own exchange margin. Treat converted prices as a guide.
 
 ## Reporting problems
 Open an issue on this GitHub repo with:

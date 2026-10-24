@@ -1,0 +1,15 @@
+/* Idle state: the wrapper is a plain inline span, so surrounding layout is untouched
+   (and things like strike-through on the parent still apply). */
+.utl-layer { white-space: nowrap; }
+.utl-alt { display: none; }
+.utl-wrap.utl-show-alt > .utl-usd { display: none; }
+.utl-wrap.utl-show-alt > .utl-alt { display: inline; }
+
+/* Held-width state: the box keeps its resting width so USD vs converted width differences don't nudge neighbours */
+.utl-wrap.utl-locked { display: inline-block; position: relative; }
+
+/* Animation state (only while a swipe is running): both layers are shown,
+   the incoming one is overlaid on the outgoing one, and the box clips vertically. */
+.utl-wrap.utl-animating { display: inline-block; position: relative; }
+.utl-wrap.utl-animating > .utl-layer { display: inline-block; }
+.utl-wrap.utl-animating > .utl-incoming { position: absolute; left: 0; top: 0; }

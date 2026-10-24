@@ -1,5 +1,6 @@
 main { max-width: 520px; margin: 12vh auto 0; padding: 0 24px; text-align: center; }
-h1 { margin: 20px 0 6px; font-size: 30px; }
+.brand { margin: 14px 0 0; font-size: 13px; letter-spacing: .18em; text-transform: uppercase; color: var(--accent); }
+h1 { margin: 6px 0 6px; font-size: 30px; }
 .version { color: var(--muted); margin: 0 0 28px; }
 .tip { font-size: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
 .inline-logo { display: inline-block; vertical-align: middle; border-radius: 5px; margin: 0 4px; }

@@ -1,10 +1,34 @@
 (() => {
   const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "SELECT"]);
 
-  // "$49.50 USD", "$1,200", or "686.40 USD" (no $ sign, as on Star Citizen Hangar XPLORer)
-  const PRICE_RE = /(?<![\w.,])(\$\s?)?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?(?!\d)(\s*USD\b)?/g;
-  // A node that is only a number, e.g. "686.40" when "USD" lives in a separate element
-  const NUM_ONLY_RE = /^\$?\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?$/;
+  // RSI can show prices in USD, EUR or GBP (its own currency switcher), so recognise all three, written as
+  // "$49.50 USD", "€45.55 EUR", "£38.50 GBP", "45,55 €", "1.234,56 EUR", or just "686.40 USD" (no symbol,
+  // as on Star Citizen Hangar XPLORer). Both "1,234.56" and "1.234,56" style numbers are understood.
+  const PRICE_RE = /(?<![\w.,])([$€£]\s?)?(\d{1,3}(?:[.,\u00a0\u202f ]\d{3})+|\d+)(?:[.,](\d{1,2}))?(?!\d)(\s*[€£]|\s*[$€£]?\s*(?:USD|EUR|GBP)(?![\w-]))?/g;
+  // A node that is only a number, e.g. "686.40" when the currency code lives in a separate element
+  const NUM_ONLY_RE = /^[$€£]?\s?(\d{1,3}(?:[.,\u00a0\u202f ]\d{3})+|\d+)(?:[.,]\d{1,2})?\s*[€£]?$/;
+  const BARE_RE = /^([$€£]\s?)?(\d{1,3}(?:[.,\u00a0\u202f ]\d{3})+|\d+)(?:[.,](\d{1,2}))?\s*([€£])?$/;
+  const SOURCE_RE = /USD|EUR|GBP/;
+  const LABEL_RE = /^(USD|EUR|GBP)$/;
+  const SYM_TO_CODE = { "$": "USD", "€": "EUR", "£": "GBP" };
+
+  const toAmount = (intPart, dec) => parseFloat(intPart.replace(/[.,\u00a0\u202f ]/g, "") + "." + (dec || "0"));
+
+  // What a PRICE_RE match says: the amount, the currency it's in, and whether a symbol / code is present
+  function parseMatch(m) {
+    const post = m[4] || "";
+    const sym = (m[1] ? m[1].trim() : "") || (/[€£]/.exec(post) || [""])[0];
+    const code = (SOURCE_RE.exec(post) || [null])[0];
+    return { amount: toAmount(m[2], m[3]), hasSym: !!sym, code, src: code || SYM_TO_CODE[sym] || "USD" };
+  }
+
+  // A number on its own (its currency code is in a neighbouring element)
+  function parseBare(text, labelCode) {
+    const m = BARE_RE.exec(text.trim());
+    if (!m) return null;
+    const sym = (m[1] ? m[1].trim() : "") || m[4] || "";
+    return { amount: toAmount(m[2], m[3]), hasSym: !!sym, src: labelCode || SYM_TO_CODE[sym] || "USD" };
+  }
 
   // Number/currency formatters for the chosen currency
   function makeFormats(code) {
@@ -76,11 +100,13 @@
 
   function renderAlt(wrap) {
     const layer = wrap._altL;
-    const usd = parseFloat(wrap.dataset.usd);
-    if (!rate || isNaN(usd)) { layer.textContent = "…"; return; }
-    const value = usd * rate;
-    const hasLabel = wrap.dataset.label === "1"; // separate "USD" element that flips to the currency code
-    const suffix = wrap.dataset.suffix === "1";   // "USD" is part of the price text itself
+    const amount = parseFloat(wrap.dataset.amt);
+    const src = wrap.dataset.src || "USD"; // the currency RSI is showing this price in
+    const srcRate = src === "USD" ? 1 : rates && rates[src];
+    if (!rate || !srcRate || isNaN(amount)) { layer.textContent = "…"; return; }
+    const value = (amount / srcRate) * rate; // source -> USD -> chosen currency
+    const hasLabel = wrap.dataset.label === "1"; // separate "USD"/"EUR"/"GBP" element that flips to the currency code
+    const suffix = wrap.dataset.suffix === "1";   // the code is part of the price text itself
     let text;
     if (wrap.dataset.sym === "1") {
       if (suffix) text = (fmt.codeSym ? fmt.num : fmt.narrow).format(value) + " " + currency;
@@ -228,9 +254,10 @@
     return n;
   }
 
-  function buildPriceWrap(textNode, usdValue, hasSymbol, hasSuffix) {
+  function buildPriceWrap(textNode, amount, hasSymbol, hasSuffix, src) {
     const wrap = el("utl-wrap");
-    wrap.dataset.usd = String(usdValue);
+    wrap.dataset.amt = String(amount);
+    wrap.dataset.src = src || "USD";
     wrap.dataset.sym = hasSymbol ? "1" : "0";
     wrap.dataset.suffix = hasSuffix ? "1" : "0";
     const usdL = el("utl-layer utl-usd");
@@ -290,9 +317,9 @@
   // ---------- pass 1: find price text ----------
   function findMatch(text) {
     for (const m of text.matchAll(PRICE_RE)) {
-      const dollar = !!m[1], usd = !!m[4];
+      const p = parseMatch(m);
       const whole = text.trim() === m[0].trim();
-      if ((dollar && (usd || whole)) || (!dollar && usd)) return m;
+      if ((p.hasSym && (p.code || whole)) || (!p.hasSym && p.code)) return m;
     }
     return null;
   }
@@ -304,8 +331,8 @@
     let target = textNode;
     if (m.index > 0) target = textNode.splitText(m.index);
     const tail = target.nodeValue.length > m[0].length ? target.splitText(m[0].length) : null;
-    const value = parseFloat(m[2].replace(/,/g, "") + "." + (m[3] || "0"));
-    buildPriceWrap(target, value, !!m[1], !!m[4]);
+    const p = parseMatch(m);
+    buildPriceWrap(target, p.amount, p.hasSym, !!p.code, p.src);
     if (tail) wrapPrice(tail);
   }
 
@@ -336,24 +363,25 @@
 
   function scanLabels(root) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-      acceptNode: (n) => (n.nodeValue.includes("USD") ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
+      acceptNode: (n) => (SOURCE_RE.test(n.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
     });
     const nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);
 
     for (const n of nodes) {
-      if (!n.isConnected || isSkippable(n) || n.nodeValue.trim() !== "USD") continue;
+      if (!n.isConnected || isSkippable(n) || !LABEL_RE.test(n.nodeValue.trim())) continue;
+      const code = n.nodeValue.trim();
       let label = n;
       const p = n.parentElement;
-      if (p && p !== document.body && p.children.length === 0 && p.textContent.trim() === "USD") label = p;
+      if (p && p !== document.body && p.children.length === 0 && LABEL_RE.test(p.textContent.trim())) label = p;
 
       const found = findPriceBefore(n, label);
       if (!found) continue;
       if (found.wrap) { link(found.wrap, label); continue; }
 
-      const t = found.node.nodeValue.trim();
-      const tn = isolate(found.node);
-      const wrap = buildPriceWrap(tn, parseFloat(t.replace(/[$,\s]/g, "")), t.includes("$"), false);
+      const bare = parseBare(found.node.nodeValue, code);
+      if (!bare) continue;
+      const wrap = buildPriceWrap(isolate(found.node), bare.amount, bare.hasSym, false, bare.src);
       link(wrap, label);
     }
   }
@@ -371,8 +399,9 @@
       if (!found) return;
       let price = found.wrap;
       if (!price) {
-        const t = found.node.nodeValue.trim();
-        price = buildPriceWrap(isolate(found.node), parseFloat(t.replace(/[$,\s]/g, "")), t.includes("$"), false);
+        const bare = parseBare(found.node.nodeValue, lw._usdL.textContent.trim());
+        if (!bare) return;
+        price = buildPriceWrap(isolate(found.node), bare.amount, bare.hasSym, false, bare.src);
       }
       pruneGroup(price._group);
       price.dataset.label = "1";
@@ -392,7 +421,7 @@
       return;
     } else {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-        acceptNode: (n) => (n.nodeValue.includes("$") || n.nodeValue.includes("USD") ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
+        acceptNode: (n) => (/[$€£]|USD|EUR|GBP/.test(n.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
       });
       const nodes = [];
       while (walker.nextNode()) nodes.push(walker.currentNode);
@@ -424,9 +453,11 @@
 
   function refreshWrapFromText(wrap) {
     const text = wrap._usdL.textContent;
-    const m = text.match(/(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?/);
+    const m = [...text.matchAll(PRICE_RE)][0];
     if (!m) return;
-    wrap.dataset.usd = String(parseFloat(m[1].replace(/,/g, "") + "." + (m[2] || "0")));
+    const p = parseMatch(m);
+    wrap.dataset.amt = String(p.amount);
+    if (p.code || p.hasSym) wrap.dataset.src = p.src; // the site may have switched currency
     renderAlt(wrap);
   }
 

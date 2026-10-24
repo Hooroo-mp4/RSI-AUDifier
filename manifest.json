@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Utilify",
-  "version": "0.4.2",
-  "description": "Handy tools for the RSI website: see prices in your own currency and recolour the site with custom themes.",
+  "name": "RSI Utilify",
+  "version": "0.5.0",
+  "description": "Handy tools for the RSI website: see prices in your own currency and recolour the site with manufacturer themes.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -14,7 +14,9 @@
   ],
   "host_permissions": [
     "https://open.er-api.com/*",
-    "https://api.frankfurter.app/*"
+    "https://api.frankfurter.app/*",
+    "https://robertsspaceindustries.com/*",
+    "https://cdn.robertsspaceindustries.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -44,7 +46,7 @@
     }
   ],
   "action": {
-    "default_title": "Utilify",
+    "default_title": "RSI Utilify",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",

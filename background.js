@@ -32,10 +32,32 @@ async function getRates(force = false) {
   return rates ?? null; // fall back to stale rates rather than nothing
 }
 
+// Downloads one of RSI's own decorative images for the theme engine (which recolours it). Only RSI's
+// site and CDN are allowed, and big files are refused.
+async function fetchImage(url, max) {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:" || (u.hostname !== "robertsspaceindustries.com" && u.hostname !== "cdn.robertsspaceindustries.com")) return { ok: false };
+    const res = await fetch(url, { credentials: "omit" });
+    if (!res.ok) return { ok: false };
+    const limit = max || 3 * 1024 * 1024;
+    if ((+res.headers.get("content-length") || 0) > limit) return { skip: true };
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.length > limit) return { skip: true };
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return { ok: true, type: res.headers.get("content-type") || "", b64: btoa(bin) };
+  } catch (_) { return { ok: false }; }
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg && msg.type === "getRates") {
     getRates().then((rates) => sendResponse({ rates }));
     return true; // keep the channel open for the async response
+  }
+  if (msg && msg.type === "fetchImage") {
+    fetchImage(msg.url, msg.max).then(sendResponse);
+    return true;
   }
 });
 

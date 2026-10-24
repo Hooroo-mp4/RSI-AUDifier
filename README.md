@@ -1,14 +1,15 @@
-# Utilify
+# RSI Utilify
 
-A small browser extension with handy tools for the [Roberts Space Industries](https://robertsspaceindustries.com) website.
+A small browser extension with handy tools for the [Roberts Space Industries](https://robertsspaceindustries.com) website. (The GitHub repository is called **Utilify**.)
 
 > Unofficial fan project. Not affiliated with Cloud Imperium Games or Roberts Space Industries.
 
 ## Features
 
 ### Currency converter
-- Hover over a USD price and it swipes up and away, replaced by the price in **your currency** at the current exchange rate. Move the mouse away and it slides back to USD.
-- The `USD` label flips to your currency code too, and a crossed-out old price flips along with the current price.
+- Hover over a price and it swipes up and away, replaced by the price in **your currency** at the current exchange rate. Move the mouse away and it slides back.
+- Works whichever currency RSI itself is showing: **USD, EUR or GBP**. RSI Utilify reads each price, works out which currency it's in, and converts from there.
+- The currency label (`USD`, `EUR` or `GBP`) flips to your currency code too, and a crossed-out old price flips along with the current price.
 - Pick **any currency** from a searchable list (default: AUD). USD, EUR and GBP are not offered.
 - Optional **Always show converted prices** mode: every price is converted without hovering (hover one to peek at the USD).
 
@@ -17,6 +18,7 @@ A small browser extension with handy tools for the [Roberts Space Industries](ht
 - Each theme colours RSI's dark backgrounds and its bright accent (buttons, links) separately, like the real brands: Aegis is gunmetal grey with red, Drake is black with hazard yellow, Tumbril is warm brown with orange.
 - Or make your own with the **Base colour**, **Accent colour** and **Colourfulness** sliders.
 - Only RSI's blues change. Sale prices, errors and the orange checkout buttons keep their colours.
+- **Blue background images are recoloured too**: the blue-line, grid and galaxy patterns behind pages are processed pixel by pixel to match your theme, and animated backgrounds are tinted to match. Photos and ship images are never touched.
 - Changes apply instantly to every open RSI tab.
 
 ### Also
@@ -36,7 +38,7 @@ A small browser extension with handy tools for the [Roberts Space Industries](ht
 
 ## Installation (manual / developer mode)
 
-Until Utilify is on a browser store, you install it by loading the folder yourself. It takes about a minute.
+Until RSI Utilify is on a browser store, you install it by loading the folder yourself. It takes about a minute.
 
 ### Step 1: Download
 1. On this GitHub page click the green **Code** button, then **Download ZIP**.
@@ -101,8 +103,8 @@ Pick your browser below.
 
 ### Step 6: Check it worked
 - A **welcome tab** should open saying "Thanks for downloading!" and showing your version number.
-- **Utilify** should appear in your extensions list, switched **on**.
-- Click the Utilify icon (pin it from the puzzle-piece / cube menu) to open the settings menu.
+- **RSI Utilify** should appear in your extensions list, switched **on**.
+- Click the RSI Utilify icon (pin it from the puzzle-piece / cube menu) to open the settings menu.
 - Open any RSI store page, for example the [First Flight Pack](https://robertsspaceindustries.com/en/pledge/Packages/Star-Citizen-First-Flight-Pack), and **hover over a price**. It should swipe up and show the converted amount.
 
 > If you had an RSI page open while installing, refresh it (`F5`) once.
@@ -110,7 +112,7 @@ Pick your browser below.
 ---
 
 ## Settings
-Click the **Utilify icon** in your browser toolbar. If you can't see it, open the puzzle-piece icon in Chrome/Edge/Brave or the cube icon in Opera and pin it.
+Click the **RSI Utilify icon** in your browser toolbar. If you can't see it, open the puzzle-piece icon in Chrome/Edge/Brave or the cube icon in Opera and pin it.
 
 | Setting | What it does |
 |---|---|
@@ -134,7 +136,7 @@ From there you can switch it off or on, or remove it.
 ## Updating
 1. Download and unzip the new version.
 2. Replace the old files in your folder with the new ones (or point **Load unpacked** at the new folder after removing the old one).
-3. Open your browser's extensions page and click the **reload** icon (circular arrow) on Utilify.
+3. Open your browser's extensions page and click the **reload** icon (circular arrow) on RSI Utilify.
 4. Refresh any open RSI tabs.
 
 (Reloading an unpacked extension also opens the welcome tab again. That's normal.)
@@ -146,18 +148,19 @@ From there you can switch it off or on, or remove it.
 | **"Manifest file is missing or unreadable"** | You selected the wrong folder. Select the one that directly contains `manifest.json` (see Step 4). |
 | **I don't see a "Load unpacked" button** | Turn on **Developer mode** first. |
 | **Extension disappeared after restarting the browser or moving a folder** | The browser lost the folder. Don't move or delete it after loading. Load it again from its location. |
-| **I can't find the settings menu** | Pin the extension: click the puzzle-piece icon (cube icon in Opera) and pin **Utilify**. |
+| **I can't find the settings menu** | Pin the extension: click the puzzle-piece icon (cube icon in Opera) and pin **RSI Utilify**. |
 | **Prices don't swap when I hover** | Refresh the RSI page. Check the extension is switched on. |
 | **Price shows "…"** | The exchange rate hasn't loaded. Check your internet connection, then refresh. |
 | **My currency isn't in the list** | The list comes from the live exchange-rate provider, so a few very obscure currencies may be missing. USD, EUR and GBP are left out on purpose. |
-| **Theme doesn't change everything** | Utilify recolours RSI's blue palette, so images, videos and a few older pages with their own styling may stay as they are. Themes are dark-mode interpretations of each brand (MISC, Origin and Tumbril are really light brands, so they appear as lighter steel, silver and tan). Open an issue with a screenshot and the page link. |
+| **A background is still blue** | Utilify recolours images that are mostly RSI-blue and sit on RSI's own site or CDN. If one stays blue, [open an issue](https://github.com/Hooroo-mp4/Utilify/issues) with the page link (or, in the browser's Inspect panel, the image's address). |
+| **Theme doesn't change everything** | RSI Utilify recolours RSI's blue palette and blue background images, so photos, ship images, videos and a few older pages with their own styling may stay as they are. Themes are dark-mode interpretations of each brand (MISC, Origin and Tumbril are really light brands, so they appear as lighter steel, silver and tan). Open an issue with a screenshot and the page link. |
 | **Page flashes blue for a moment after changing theme** | Only the very first load after picking a new theme. It's remembered after that. |
 | **Opera shows a warning about developer-mode extensions** | This is normal for extensions loaded manually. |
 | **A price on the site isn't converting** | [Open an issue](https://github.com/Hooroo-mp4/Utilify/issues) and include a screenshot and the page link. |
 
 ## How it works
 - `currency.js` finds price text (such as `$49.50 USD` or `686.40 USD`), wraps it in a two-layer element and pairs it with the separate `USD` label. `currency.css` handles the slide animation.
-- `theme.js` reads RSI's own stylesheets (and inline styles), finds every blue colour and writes override rules for the chosen theme, treating the dark base blues and the bright accent blue separately. `themes.js` holds the manufacturer presets.
+- `theme.js` reads RSI's own stylesheets (and inline styles), finds every blue colour and writes override rules for the chosen theme, treating the dark base blues and the bright accent blue separately. It also downloads RSI's decorative blue background images, recolours them on your device (SVGs as text, PNGs pixel by pixel) and swaps them in. `themes.js` holds the manufacturer presets.
 - `background.js` fetches USD exchange rates for every currency from open.er-api.com (with frankfurter.app as a fallback), caches them for an hour and refreshes them hourly.
 - `popup.html` / `popup.js` is the settings menu and `welcome.html` is the tab shown after install/update.
 - Rates are mid-market reference rates updated by the providers about once a day. Your card or PayPal's actual charge will differ because of bank fees and their own exchange margin. Treat converted prices as a guide.

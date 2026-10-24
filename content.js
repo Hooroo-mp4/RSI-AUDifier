@@ -22,7 +22,7 @@
     } catch (_) { /* extension was reloaded; refreshing the page fixes it */ }
   }
 
-  const allPriceWraps = () => document.querySelectorAll(".rsi-aud-wrap:not(.rsi-aud-label)");
+  const allPriceWraps = () => [...document.querySelectorAll(".rsi-aud-wrap:not(.rsi-aud-label)")].filter((w) => w._group);
 
   function setRate(newRate) {
     if (newRate === rate) return;
@@ -100,13 +100,18 @@
     if (deco) wrap.style.textDecoration = deco;
     wrap.classList.add("rsi-animating");
     wrap.style.clipPath = "inset(-0.1em -400px)"; // clip top/bottom only
+    const wOut = outL.getBoundingClientRect().width;
+    const wIn = inL.getBoundingClientRect().width;
     const a1 = outL.animate(
       [{ transform: "translateY(0)", opacity: 1 }, { transform: "translateY(-100%)", opacity: 0 }], ANIM);
     const a2 = inL.animate(
       [{ transform: "translateY(100%)", opacity: 0 }, { transform: "translateY(0)", opacity: 1 }], ANIM);
-    wrap._anims = [a1, a2];
-    Promise.all([a1.finished, a2.finished]).then(() => {
-      if (wrap._anims && wrap._anims[0] === a1) { settle(); a1.cancel(); a2.cancel(); }
+    // Glide the box from the old text's width to the new text's width (USD vs AUD differ by a few px),
+    // so the final layout matches the last animation frame and nothing shifts at the end.
+    const a3 = wrap.animate([{ width: wOut + "px" }, { width: wIn + "px" }], ANIM);
+    wrap._anims = [a1, a2, a3];
+    Promise.all([a1.finished, a2.finished, a3.finished]).then(() => {
+      if (wrap._anims && wrap._anims[0] === a1) { settle(); a1.cancel(); a2.cancel(); a3.cancel(); }
     }).catch(() => {}); // cancelled by a newer swap
   }
 
@@ -196,8 +201,13 @@
     return lw;
   }
 
+  // A price "has a label" only if its paired USD label is still on the page
+  const hasLiveLabel = (w) => !!w._group && w._group.some((x) => x !== w && x.isConnected);
+  function pruneGroup(g) { g.splice(0, g.length, ...g.filter((x) => x.isConnected)); }
+
   function link(priceWrap, label) {
-    if (priceWrap.dataset.label === "1") return;
+    if (hasLiveLabel(priceWrap)) return;
+    pruneGroup(priceWrap._group);
     const lw = buildLabelWrap(label);
     priceWrap.dataset.label = "1";
     lw._group = priceWrap._group;
@@ -248,7 +258,7 @@
       if (SKIP_TAGS.has(pe.tagName)) continue;
       if (pe.closest(".rsi-aud-label")) return null;       // previous thing was another label
       const w = pe.closest(".rsi-aud-wrap");
-      if (w) return w.dataset.label === "1" || w.dataset.suffix === "1" ? null : { wrap: w };
+      if (w) return !w._group || hasLiveLabel(w) || w.dataset.suffix === "1" ? null : { wrap: w };
       return NUM_ONLY_RE.test(t.nodeValue.trim()) ? { node: t } : null;
     }
     return null;
@@ -278,6 +288,31 @@
     }
   }
 
+  // If the site re-renders a price (e.g. the cart subtotal after "Add to cart") our wrapper around the
+  // number is discarded but the label wrapper survives. Pair each orphaned label with the new price.
+  function relinkOrphanLabels(root) {
+    root.querySelectorAll(".rsi-aud-label").forEach((lw) => {
+      const g = lw._group;
+      if (!g || (g[0] && g[0].isConnected)) return;
+      const tw = document.createTreeWalker(lw._usdL, NodeFilter.SHOW_TEXT);
+      const startText = tw.nextNode();
+      if (!startText) return;
+      const found = findPriceBefore(startText, lw);
+      if (!found) return;
+      let price = found.wrap;
+      if (!price) {
+        const t = found.node.nodeValue.trim();
+        price = buildPriceWrap(isolate(found.node), parseFloat(t.replace(/[$,\s]/g, "")), t.includes("$"), false);
+      }
+      pruneGroup(price._group);
+      price.dataset.label = "1";
+      lw._group = price._group;
+      price._group.push(lw);
+      renderAud(price);
+      swap(lw, price._view, false);
+    });
+  }
+
   function scan(root) {
     if (root.nodeType === Node.TEXT_NODE) {
       wrapPrice(root);
@@ -299,6 +334,7 @@
       labelRoot = labelRoot.parentElement;
     }
     scanLabels(labelRoot);
+    relinkOrphanLabels(labelRoot);
   }
 
   // ---------- keep up with prices the site (or other extensions) render later ----------

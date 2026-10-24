@@ -7,6 +7,8 @@ Hover over a USD price and it swipes up and away, replaced by the price in **AUD
 
 ## Features
 - Smooth swipe-up animation from USD to AUD, and back again when you move the mouse away
+- Click the extension icon for a settings menu with an **Always show AUD** toggle (every price converts without hovering; hover a price to peek at the USD)
+- A welcome tab opens after installing or updating
 - Exchange rate is fetched automatically and refreshed hourly
 - Works on the RSI store, pledge pages, and account pages
 - No data collected, no tracking, no accounts (see [PRIVACY.md](PRIVACY.md))
@@ -89,13 +91,23 @@ Pick your browser below.
 3. Click **Load unpacked**, click the folder once to highlight it, then **Select**.
 
 ### Step 6: Check it worked
+- A **welcome tab** should open saying "Thanks for downloading!" and showing your version number.
 - **RSI AUDifier** should now appear in your extensions list, switched **on**.
-- There is no toolbar button or popup. The extension runs by itself.
+- The extension runs by itself. Click its icon (pin it from the puzzle-piece / cube menu) to open the settings menu.
 - Open any RSI store page, for example the [First Flight Pack](https://robertsspaceindustries.com/en/pledge/Packages/Star-Citizen-First-Flight-Pack), and **hover over a price**. It should swipe up and show the AUD amount.
 
 > If you had the RSI page open while installing, refresh it (`F5`) once.
 
 ---
+
+## Settings
+Click the **RSI AUDifier icon** in your browser toolbar (if you can't see it, open the puzzle-piece icon in Chrome/Edge/Brave or the cube icon in Opera and pin it).
+
+| Setting | What it does |
+|---|---|
+| **Always show AUD** | Converts every price on the page without needing to hover. Hover a price to peek at the original USD. |
+
+The menu also shows the exchange rate currently in use and when it was last updated.
 
 ## Where to find the extension afterwards
 
@@ -114,6 +126,8 @@ From there you can switch it off or on, or remove it.
 3. Open your browser's extensions page and click the **reload** icon (circular arrow) on RSI AUDifier.
 4. Refresh any open RSI tabs.
 
+(Reloading an unpacked extension also opens the welcome tab again. That's normal.)
+
 ## Troubleshooting
 
 | Problem | Fix |
@@ -121,6 +135,7 @@ From there you can switch it off or on, or remove it.
 | **"Manifest file is missing or unreadable"** | You selected the wrong folder. Select the one that directly contains `manifest.json` (see Step 4). |
 | **I don't see a "Load unpacked" button** | Turn on **Developer mode** first. |
 | **Extension disappeared after restarting the browser or moving a folder** | The browser lost the folder. Don't move or delete it after loading. Load it again from its location. |
+| **I can't find the settings menu** | Pin the extension: click the puzzle-piece icon (cube icon in Opera) and pin **RSI AUDifier**. |
 | **Prices don't swap when I hover** | Refresh the RSI page. Check the extension is switched on. |
 | **AUD price shows "…"** | The exchange rate hasn't loaded. Check your internet connection, then refresh. |
 | **Opera shows a warning about developer-mode extensions** | This is normal for extensions loaded manually. |
@@ -128,6 +143,7 @@ From there you can switch it off or on, or remove it.
 
 ## How it works
 - `content.js` finds price text (such as `$49.50 USD` or `686.40 USD`), wraps it in a two-layer element and pairs it with the separate `USD` label. `content.css` handles the slide animation.
+- `popup.html` / `popup.js` is the settings menu and `welcome.html` is the tab shown after install/update.
 - `background.js` fetches the USD→AUD rate from open.er-api.com (with frankfurter.app as a fallback), caches it for an hour and refreshes it hourly.
 - Rates are mid-market reference rates updated by the providers about once a day. Your card or PayPal's actual charge will differ because of bank fees and their own exchange margin. Treat the AUD price as a guide.
 

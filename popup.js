@@ -2,17 +2,16 @@ const toggle = document.getElementById("permanent");
 const rateEl = document.getElementById("rate");
 document.getElementById("version").textContent = "Version " + chrome.runtime.getManifest().version;
 
-function ago(ts) {
-  const mins = Math.max(0, Math.round((Date.now() - ts) / 60000));
-  if (mins < 1) return "just now";
-  if (mins < 60) return mins + " min ago";
-  const h = Math.round(mins / 60);
-  return h + (h === 1 ? " hour ago" : " hours ago");
+function clock(ts) {
+  const d = new Date(ts);
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (d.toDateString() === new Date().toDateString()) return time;
+  return d.toLocaleDateString([], { day: "numeric", month: "short" }) + ", " + time;
 }
 
 function showRate(rate, updated) {
   rateEl.textContent = rate
-    ? "1 USD = " + rate.toFixed(4) + " AUD" + (updated ? " · updated " + ago(updated) : "")
+    ? "1 USD = " + rate.toFixed(4) + " AUD" + (updated ? " · updated at " + clock(updated) : "")
     : "Exchange rate unavailable. Check your connection.";
 }
 
@@ -22,7 +21,10 @@ chrome.storage.local.get(["permanent", "rate", "updated"]).then(async (s) => {
   if (!s.rate) { // first run: ask the background script to fetch one
     try {
       const res = await chrome.runtime.sendMessage({ type: "getRate" });
-      if (res && res.rate) showRate(res.rate, Date.now());
+      if (res && res.rate) {
+        const { updated } = await chrome.storage.local.get("updated");
+        showRate(res.rate, updated || Date.now());
+      }
     } catch (_) {}
   }
 });

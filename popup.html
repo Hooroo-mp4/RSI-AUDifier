@@ -46,18 +46,23 @@
 
   <section>
     <h2>Website theme</h2>
-    <div class="swatches" id="swatches" role="radiogroup" aria-label="Theme presets"></div>
+    <div class="swatches" id="swatches" role="radiogroup" aria-label="Manufacturer themes"></div>
+    <div class="themeName" id="themeName"></div>
     <div class="sliders">
       <label>
-        <span>Hue</span>
-        <input type="range" id="hue" min="0" max="359" step="1" aria-label="Custom hue">
+        <span>Base colour</span>
+        <input type="range" id="hue" class="rainbow" min="0" max="359" step="1" aria-label="Base colour hue">
+      </label>
+      <label>
+        <span>Accent colour</span>
+        <input type="range" id="accentHue" class="rainbow" min="0" max="359" step="1" aria-label="Accent colour hue">
       </label>
       <label>
         <span>Colourfulness</span>
-        <input type="range" id="sat" min="0" max="150" step="5" aria-label="Custom colourfulness">
+        <input type="range" id="sat" min="0" max="150" step="5" aria-label="Colourfulness">
       </label>
     </div>
-    <div class="hint" id="themeName">Recolours RSI's blue. Applies instantly to open RSI tabs.</div>
+    <div class="hint">Themes are based on in-game manufacturers. They recolour RSI's blues and apply instantly to open RSI tabs.</div>
   </section>
 
   <footer>

@@ -9,9 +9,14 @@
   const STYLE_ID = "utilify-theme-css";
   const VERSION = chrome.runtime.getManifest().version;
   const HUE_MIN = 185, HUE_MAX = 232, SAT_MIN = 0.1; // what counts as "RSI blue"
+  const ACCENT_MIN_SAT = 0.75, ACCENT_MIN_LIGHT = 0.4; // bright + saturated blue = accent, the rest = base
   const MIN_RULES_TO_TRUST = 10;                     // fewer than this means RSI's CSS hasn't loaded yet
   const COLOR_RE = /#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})\b|rgba?\(\s*[\d.%\s,\/-]+\)/gi;
   const SKIP_PROPS = new Set(["content", "font-family", "quotes", "grid-template-areas", "src"]);
+
+  const INLINE_ATTR = "data-utl-s";       // marks elements whose inline style has blue colours in it
+  const INLINE_SEL = '[style*="rgb"],[style*="#"]';
+  const knownInline = new Set();           // inline-style fingerprints we already have override rules for
 
   let theme = utilifyNormalizeTheme(null);
   let styleEl = null;
@@ -57,11 +62,19 @@
     return [r, g, b].map((v) => Math.round((v + m) * 255));
   }
 
-  // Returns [r, g, b] with the hue shifted, or null if this isn't one of RSI's blues
+  // RSI's blues come in two kinds: a dark "base" ramp (backgrounds, panels, text tints) and a bright,
+  // highly saturated "accent" blue (buttons, links). A theme recolours each separately.
+  // Returns [r, g, b], or null if this isn't one of RSI's blues.
   function shiftRgb(r, g, b, T) {
     const [h, s, l] = rgbToHsl(r, g, b);
     if (s < SAT_MIN || h < HUE_MIN || h > HUE_MAX) return null;
-    return hslToRgb((h + (T.hue - UTILIFY_BASE_HUE) + 360) % 360, Math.min(1, s * T.sat), l);
+    if (s >= ACCENT_MIN_SAT && l >= ACCENT_MIN_LIGHT) { // accent
+      const A = T.accent;
+      return hslToRgb((h + (A.hue - UTILIFY_ACCENT_HUE) + 360) % 360, Math.min(1, s * A.sat * T.vibe), Math.min(0.97, l * A.lum));
+    }
+    const B = T.base; // surfaces: brightness change fades out towards light text tints so text stays readable
+    const w = Math.min(1, Math.max(0, (0.55 - l) / 0.25));
+    return hslToRgb((h + (B.hue - UTILIFY_BASE_HUE) + 360) % 360, Math.min(1, s * B.sat * T.vibe), Math.min(0.97, l * (1 + (B.lum - 1) * w)));
   }
 
   function shiftColor(c, T) {
@@ -99,6 +112,53 @@
     return changed ? parts.join("") : null;
   }
 
+  // Walk the declarations in a style block's text. We parse the text rather than iterating the
+  // browser's expanded properties, because a shorthand containing var() (e.g. a background that uses
+  // rgba(var(--x), .4)) isn't expanded and would be invisible to us.
+  function shiftDeclarations(cssText, T) {
+    let out = "", depth = 0, quote = "", start = 0;
+    const flush = (end) => {
+      const decl = cssText.slice(start, end);
+      start = end + 1;
+      const c = decl.indexOf(":");
+      if (c < 1) return;
+      const name = decl.slice(0, c).trim();
+      if (SKIP_PROPS.has(name)) return;
+      const raw = decl.slice(c + 1).replace(/\s*!important\s*$/i, "").trim();
+      const nv = name.charCodeAt(0) === 45 && CHANNEL_NAME_RE.test(name)
+        ? shiftChannels(raw, T) || shiftValue(raw, T)
+        : shiftValue(raw, T);
+      if (nv) out += name + ":" + nv + "!important;";
+    };
+    for (let i = 0; i < cssText.length; i++) {
+      const ch = cssText[i];
+      if (quote) { if (ch === quote && cssText[i - 1] !== "\\") quote = ""; }
+      else if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === "(") depth++;
+      else if (ch === ")") depth--;
+      else if (ch === ";" && depth === 0) flush(i);
+    }
+    flush(cssText.length);
+    return out;
+  }
+
+  // ---------- inline styles ----------
+  // Some of RSI's colours (like the page background gradient) are set in an element's style="..."
+  // attribute, which a stylesheet rule can't select. We tag such elements with a fingerprint of their
+  // style text and write a rule for that fingerprint. (Fingerprints are stable, so cached CSS still works.)
+  function hashStr(str) {
+    let h = 5381;
+    for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(36);
+  }
+  function tagInline(el) {
+    const st = el.getAttribute && el.getAttribute("style");
+    if (!st || (st.indexOf("rgb") < 0 && st.indexOf("#") < 0)) return null;
+    const key = hashStr(st);
+    if (el.getAttribute(INLINE_ATTR) !== key) el.setAttribute(INLINE_ATTR, key);
+    return key;
+  }
+
   // ---------- build override CSS from RSI's own stylesheets ----------
   function build(T) {
     const chunks = [];
@@ -107,16 +167,7 @@
     const visit = (rules, wrappers) => {
       for (const r of rules) {
         if (r instanceof CSSStyleRule) {
-          let decl = "";
-          for (let i = 0; i < r.style.length; i++) {
-            const name = r.style[i];
-            if (SKIP_PROPS.has(name)) continue;
-            const raw = r.style.getPropertyValue(name);
-            const nv = name.charCodeAt(0) === 45 && CHANNEL_NAME_RE.test(name)
-              ? shiftChannels(raw, T) || shiftValue(raw, T)
-              : shiftValue(raw, T);
-            if (nv) decl += name + ":" + nv + "!important;";
-          }
+          const decl = shiftDeclarations(r.style.cssText, T);
           if (decl) {
             count++;
             chunks.push(wrappers.reduceRight((acc, w) => w + "{" + acc + "}", r.selectorText + "{" + decl + "}"));
@@ -135,9 +186,20 @@
       try { visit(sheet.cssRules, []); } catch (_) { /* cross-origin sheet we can't read */ }
     }
 
+    // Colours set directly in style="..." attributes
+    const seen = new Set();
+    document.querySelectorAll(INLINE_SEL).forEach((el) => {
+      const key = tagInline(el);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      const decl = shiftDeclarations(el.style.cssText, T);
+      if (decl) { count++; chunks.push("[" + INLINE_ATTR + '="' + key + '"]{' + decl + "}"); }
+    });
+    seen.forEach((k) => knownInline.add(k));
+
     // The animated background is a <canvas>, so tint it with a filter instead
-    const dh = T.hue - UTILIFY_BASE_HUE;
-    chunks.push('[data-rsi-component="BackgroundRiveAnimation"] canvas{filter:hue-rotate(' + dh + "deg) saturate(" + T.sat + ")!important}");
+    const dh = T.base.hue - UTILIFY_BASE_HUE;
+    chunks.push('[data-rsi-component="BackgroundRiveAnimation"] canvas{filter:hue-rotate(' + dh + "deg) saturate(" + +(T.base.sat * T.vibe).toFixed(3) + ") brightness(" + T.base.lum + ")!important}");
     return { css: chunks.join("\n"), count };
   }
 
@@ -157,7 +219,7 @@
     styleEl = null; injectedFromCache = false;
   }
 
-  const keyOf = (T) => VERSION + "|" + T.hue + "|" + T.sat;
+  const keyOf = (T) => VERSION + "|" + JSON.stringify(T);
 
   function rebuild() {
     timer = null;
@@ -170,7 +232,7 @@
     injectedFromCache = false;
     if (count >= MIN_RULES_TO_TRUST && css !== cachedCss) {
       cachedCss = css;
-      try { chrome.storage.local.set({ themeCss: { key: keyOf(theme), css } }); } catch (_) {}
+      try { chrome.storage.local.set({ themeCss: { key: keyOf(theme), css, inline: [...knownInline] } }); } catch (_) {}
     }
   }
 
@@ -182,10 +244,23 @@
   // RSI injects its stylesheets as the app starts up, so rebuild whenever new ones appear
   function watchStylesheets() {
     const isSheet = (n) => n.nodeType === 1 && (n.nodeName === "STYLE" || (n.nodeName === "LINK" && /stylesheet/i.test(n.rel))) && n.id !== STYLE_ID;
+    // Tag new elements straight away (so cached rules apply before the next paint); rebuild if one is new to us
+    const tagTree = (n) => {
+      if (n.nodeType !== 1) return false;
+      let fresh = false;
+      const check = (el) => { const k = tagInline(el); if (k && !knownInline.has(k)) fresh = true; };
+      check(n);
+      if (n.querySelectorAll) n.querySelectorAll(INLINE_SEL).forEach(check);
+      return fresh;
+    };
     new MutationObserver((muts) => {
+      if (utilifyThemeIsDefault(theme)) return;
+      let rebuildNeeded = false;
       for (const m of muts) {
-        if ((m.target.nodeName === "STYLE" && m.target.id !== STYLE_ID) || [...m.addedNodes].some(isSheet)) { schedule(250); return; }
+        if (m.target.nodeName === "STYLE" && m.target.id !== STYLE_ID) rebuildNeeded = true;
+        for (const n of m.addedNodes) { if (isSheet(n)) rebuildNeeded = true; else if (tagTree(n)) rebuildNeeded = true; }
       }
+      if (rebuildNeeded) schedule(250);
     }).observe(document.documentElement, { childList: true, subtree: true });
     document.addEventListener("load", (e) => { if (e.target && e.target.nodeName === "LINK") schedule(150); }, true);
     document.addEventListener("DOMContentLoaded", () => schedule(100));
@@ -198,6 +273,7 @@
     theme = utilifyNormalizeTheme(s.theme);
     if (!utilifyThemeIsDefault(theme) && s.themeCss && s.themeCss.key === keyOf(theme)) {
       cachedCss = s.themeCss.css;
+      (s.themeCss.inline || []).forEach((k) => knownInline.add(k));
       inject(cachedCss);          // themed from the very first paint
       injectedFromCache = true;
     }

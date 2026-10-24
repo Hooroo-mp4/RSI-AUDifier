@@ -126,14 +126,19 @@ function saveTheme(immediate) {
   if (immediate) write(); else saveTimer = setTimeout(write, 120); // debounce while dragging a slider
 }
 
+const themeLabel = () => {
+  const preset = UTILIFY_THEMES.find((p) => p.id === state.theme.id);
+  return preset ? preset.name : "Custom theme";
+};
+
 function renderTheme() {
   const t = state.theme;
-  $("hue").value = t.hue;
-  $("sat").value = Math.round(t.sat * 100);
-  $("sat").style.background = "linear-gradient(90deg,#555,hsl(" + t.hue + " 80% 55%))";
+  $("hue").value = t.base.hue;
+  $("accentHue").value = t.accent.hue;
+  $("sat").value = Math.round(t.vibe * 100);
+  $("sat").style.background = "linear-gradient(90deg,#555,hsl(" + t.accent.hue + " 80% 55%))";
   document.querySelectorAll(".swatch").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.id === t.id)));
-  const preset = UTILIFY_THEMES.find((p) => p.id === t.id);
-  $("themeName").textContent = (preset ? preset.name + " theme. " : "Custom theme. ") + "Recolours RSI's blue; applies instantly to open RSI tabs.";
+  $("themeName").textContent = themeLabel();
 }
 
 function buildSwatches() {
@@ -142,18 +147,29 @@ function buildSwatches() {
     const b = document.createElement("button");
     b.type = "button"; b.className = "swatch"; b.dataset.id = p.id;
     b.role = "radio"; b.title = p.name; b.setAttribute("aria-label", p.name);
-    b.style.background = utilifySwatchColor(p);
-    b.addEventListener("click", () => { state.theme = { id: p.id, hue: p.hue, sat: p.sat }; renderTheme(); saveTheme(true); });
+    const [surface, accent] = utilifySwatchColors(p);
+    b.style.background = "linear-gradient(135deg," + surface + " 50%," + accent + " 50%)"; // surface colour / accent colour
+    b.addEventListener("click", () => { state.theme = utilifyNormalizeTheme(p); renderTheme(); saveTheme(true); });
+    b.addEventListener("mouseenter", () => { $("themeName").textContent = p.name; });
+    b.addEventListener("mouseleave", () => { $("themeName").textContent = themeLabel(); });
     wrap.appendChild(b);
   });
 }
 
-function onSlider() {
-  state.theme = { id: "custom", hue: +$("hue").value, sat: +$("sat").value / 100 };
+// Moving a slider starts from the current theme and marks it custom. Greys have no hue to change,
+// so touching a hue slider on a grey colour makes it colourful first.
+function onSlider(which) {
+  const t = utilifyNormalizeTheme(state.theme);
+  t.id = "custom";
+  if (which === "hue") { t.base.hue = +$("hue").value; if (t.base.sat < 0.5) t.base.sat = 0.9; }
+  else if (which === "accent") { t.accent.hue = +$("accentHue").value; if (t.accent.sat < 0.5) t.accent.sat = 0.9; }
+  else t.vibe = +$("sat").value / 100;
+  state.theme = utilifyNormalizeTheme(t);
   renderTheme(); saveTheme(false);
 }
-$("hue").addEventListener("input", onSlider);
-$("sat").addEventListener("input", onSlider);
+$("hue").addEventListener("input", () => onSlider("hue"));
+$("accentHue").addEventListener("input", () => onSlider("accent"));
+$("sat").addEventListener("input", () => onSlider("sat"));
 
 // ---------- start ----------
 $("permanent").addEventListener("change", (e) => chrome.storage.local.set({ permanent: e.target.checked }));

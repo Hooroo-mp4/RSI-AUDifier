@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Utilify",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Handy tools for the RSI website: see prices in your own currency and recolour the site with custom themes.",
   "icons": {
     "16": "icons/icon16.png",

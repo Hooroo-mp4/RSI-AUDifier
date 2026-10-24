@@ -13,8 +13,9 @@ A small browser extension with handy tools for the [Roberts Space Industries](ht
 - Optional **Always show converted prices** mode: every price is converted without hovering (hover one to peek at the USD).
 
 ### Website themes
-- Recolour RSI's blue with one click: RSI Blue (default), Teal, Emerald, Amber, Crimson, Magenta, Violet or Graphite.
-- Or make your own with the **Hue** and **Colourfulness** sliders.
+- Re-theme the whole site in the style of an in-game manufacturer with one click: **Aegis Dynamics, Anvil Aerospace, Aopoa, Argo Astronautics, Banu, Consolidated Outland, Crusader Industries, Drake Interplanetary, Esperia, Gatac Manufacture, Grey's Market, Greycat Industrial, Kruger Intergalactic, Mirai, MISC, Origin Jumpworks, Tumbril Land Systems**, or the normal **Roberts Space Industries** blue.
+- Each theme colours RSI's dark backgrounds and its bright accent (buttons, links) separately, like the real brands: Aegis is gunmetal grey with red, Drake is black with hazard yellow, Tumbril is warm brown with orange.
+- Or make your own with the **Base colour**, **Accent colour** and **Colourfulness** sliders.
 - Only RSI's blues change. Sale prices, errors and the orange checkout buttons keep their colours.
 - Changes apply instantly to every open RSI tab.
 
@@ -115,7 +116,7 @@ Click the **Utilify icon** in your browser toolbar. If you can't see it, open th
 |---|---|
 | **Always show converted prices** | Converts every price on the page without hovering. Hover a price to peek at the original USD. |
 | **Convert prices to** | Pick your currency. Type in the search box to filter (try `yen`, `CAD` or `swiss`). Defaults to AUD. |
-| **Website theme** | Pick a preset colour, or drag **Hue** / **Colourfulness** to make your own. Choose the first (blue) swatch to go back to RSI's normal look. |
+| **Website theme** | Pick a manufacturer (hover a swatch to see its name; each swatch shows the theme's background colour and accent colour), or drag **Base colour** / **Accent colour** / **Colourfulness** to make your own. Choose the first swatch (RSI blue) to go back to the normal look. |
 
 The menu also shows the exchange rate in use and the time it was last fetched.
 
@@ -149,14 +150,14 @@ From there you can switch it off or on, or remove it.
 | **Prices don't swap when I hover** | Refresh the RSI page. Check the extension is switched on. |
 | **Price shows "…"** | The exchange rate hasn't loaded. Check your internet connection, then refresh. |
 | **My currency isn't in the list** | The list comes from the live exchange-rate provider, so a few very obscure currencies may be missing. USD, EUR and GBP are left out on purpose. |
-| **Theme doesn't change everything** | Utilify recolours RSI's blue palette, so some images, videos and a few older pages with their own styling may stay as they are. Open an issue with a screenshot and the page link. |
+| **Theme doesn't change everything** | Utilify recolours RSI's blue palette, so images, videos and a few older pages with their own styling may stay as they are. Themes are dark-mode interpretations of each brand (MISC, Origin and Tumbril are really light brands, so they appear as lighter steel, silver and tan). Open an issue with a screenshot and the page link. |
 | **Page flashes blue for a moment after changing theme** | Only the very first load after picking a new theme. It's remembered after that. |
 | **Opera shows a warning about developer-mode extensions** | This is normal for extensions loaded manually. |
 | **A price on the site isn't converting** | Open an issue (see below) and include a screenshot and the page link. |
 
 ## How it works
 - `currency.js` finds price text (such as `$49.50 USD` or `686.40 USD`), wraps it in a two-layer element and pairs it with the separate `USD` label. `currency.css` handles the slide animation.
-- `theme.js` reads RSI's own stylesheets, finds every blue colour and writes override rules with the hue shifted. `themes.js` holds the presets.
+- `theme.js` reads RSI's own stylesheets (and inline styles), finds every blue colour and writes override rules for the chosen theme, treating the dark base blues and the bright accent blue separately. `themes.js` holds the manufacturer presets.
 - `background.js` fetches USD exchange rates for every currency from open.er-api.com (with frankfurter.app as a fallback), caches them for an hour and refreshes them hourly.
 - `popup.html` / `popup.js` is the settings menu and `welcome.html` is the tab shown after install/update.
 - Rates are mid-market reference rates updated by the providers about once a day. Your card or PayPal's actual charge will differ because of bank fees and their own exchange margin. Treat converted prices as a guide.

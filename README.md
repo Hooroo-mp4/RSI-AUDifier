@@ -152,7 +152,7 @@ From there you can switch it off or on, or remove it.
 | **Prices don't swap when I hover** | Refresh the RSI page. Check the extension is switched on. |
 | **Price shows "…"** | The exchange rate hasn't loaded. Check your internet connection, then refresh. |
 | **My currency isn't in the list** | The list comes from the live exchange-rate provider, so a few very obscure currencies may be missing. USD, EUR and GBP are left out on purpose. |
-| **A background is still blue** | Utilify recolours images that are mostly RSI-blue and sit on RSI's own site or CDN. If one stays blue, [open an issue](https://github.com/Hooroo-mp4/Utilify/issues) with the page link (or, in the browser's Inspect panel, the image's address). |
+| **A background is still blue** | RSI Utilify recolours images that are mostly RSI-blue and sit on RSI's own site or CDN. If one stays blue, [open an issue](https://github.com/Hooroo-mp4/Utilify/issues) with the page link (or, in the browser's Inspect panel, the image's address). |
 | **Theme doesn't change everything** | RSI Utilify recolours RSI's blue palette and blue background images, so photos, ship images, videos and a few older pages with their own styling may stay as they are. Themes are dark-mode interpretations of each brand (MISC, Origin and Tumbril are really light brands, so they appear as lighter steel, silver and tan). Open an issue with a screenshot and the page link. |
 | **Page flashes blue for a moment after changing theme** | Only the very first load after picking a new theme. It's remembered after that. |
 | **Opera shows a warning about developer-mode extensions** | This is normal for extensions loaded manually. |
@@ -160,7 +160,7 @@ From there you can switch it off or on, or remove it.
 
 ## How it works
 - `currency.js` finds price text (such as `$49.50 USD` or `686.40 USD`), wraps it in a two-layer element and pairs it with the separate `USD` label. `currency.css` handles the slide animation.
-- `theme.js` reads RSI's own stylesheets (and inline styles), finds every blue colour and writes override rules for the chosen theme, treating the dark base blues and the bright accent blue separately. It also downloads RSI's decorative blue background images, recolours them on your device (SVGs as text, PNGs pixel by pixel) and swaps them in. `themes.js` holds the manufacturer presets.
+- `theme.js` reads RSI's own stylesheets (and inline styles), finds every blue colour and writes override rules for the chosen theme, treating the dark base blues and the bright accent blue separately. It also downloads RSI's decorative blue background images, recolours them on your device (SVGs as text, PNGs pixel by pixel) and swaps them in, and reads what the page's big background layers actually paint so backgrounds set by unreadable stylesheets or inlined as tiny images are recoloured too. `themes.js` holds the manufacturer presets.
 - `background.js` fetches USD exchange rates for every currency from open.er-api.com (with frankfurter.app as a fallback), caches them for an hour and refreshes them hourly.
 - `popup.html` / `popup.js` is the settings menu and `welcome.html` is the tab shown after install/update.
 - Rates are mid-market reference rates updated by the providers about once a day. Your card or PayPal's actual charge will differ because of bank fees and their own exchange margin. Treat converted prices as a guide.

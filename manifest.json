@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "RSI Utilify",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Handy tools for the RSI website: see prices in your own currency and recolour the site with manufacturer themes.",
   "icons": {
     "16": "icons/icon16.png",
@@ -10,7 +10,8 @@
   },
   "permissions": [
     "storage",
-    "alarms"
+    "alarms",
+    "unlimitedStorage"
   ],
   "host_permissions": [
     "https://open.er-api.com/*",

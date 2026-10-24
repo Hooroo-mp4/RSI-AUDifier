@@ -25,14 +25,17 @@
   const INLINE_ATTR = "data-utl-s";       // marks elements whose inline style has blue colours in it
   const INLINE_SEL = '[style*="rgb"],[style*="#"],[style*="url("]';
   const CANVAS_ATTR = "data-utl-c";       // marks big background <canvas> elements (animated backgrounds)
+  const BG_ATTR = "data-utl-b";           // marks big background layers whose painted background we recoloured
 
   // Decorative background images (the blue lines, grids and galaxy patterns) are recoloured pixel by pixel.
   const IMG_STYLE_ID = "utilify-theme-img";
   const MAX_IMG_FETCHES = 40;             // per page load
-  const MAX_IMG_BYTES = 3 * 1024 * 1024;  // skip bigger source files
-  const MAX_PIXELS = 6e6;                 // skip bigger bitmaps
-  const MAX_DATA_CHARS = 3e6;             // skip results bigger than this
-  const TOTAL_CACHE_CHARS = 7e6;          // keep the saved copy of all recoloured images under this
+  const MAX_IMG_BYTES = 8 * 1024 * 1024;  // skip bigger source files
+  const MAX_DATA_URL_BYTES = 400 * 1024;  // skip bigger inline data: images
+  const MAX_PIXELS = 12e6;                // skip bigger bitmaps (a 4K background is 8.3 million)
+  const MAX_DATA_CHARS = 14e6;            // skip results bigger than this
+  const TOTAL_CACHE_CHARS = 30e6;         // keep the saved copy of all recoloured images under this
+  const IMG_HUE_MIN = 165, IMG_HUE_MAX = 240; // images judged "blue decoration" use a wider blue range than CSS colours
   const imgDone = new Map();              // id -> recoloured data: URL (for the current theme)
   const imgSkip = new Set();              // ids that aren't blue decoration (photos, greys) or can't be handled
   const imgFailed = new Set();            // ids we couldn't download this session
@@ -89,10 +92,13 @@
   // RSI's blues come in two kinds: a dark "base" ramp (backgrounds, panels, text tints) and a bright,
   // highly saturated "accent" blue (buttons, links). A theme recolours each separately.
   // Returns [r, g, b], or null if this isn't one of RSI's blues.
-  function shiftRgb(r, g, b, T) {
+  function shiftRgb(r, g, b, T, wide) {
     const [h, s, l] = rgbToHsl(r, g, b);
-    if (s < SAT_MIN || h < HUE_MIN || h > HUE_MAX) return null;
-    if (s >= ACCENT_MIN_SAT && l >= ACCENT_MIN_LIGHT) { // accent
+    if (s < SAT_MIN || h < (wide ? IMG_HUE_MIN : HUE_MIN) || h > (wide ? IMG_HUE_MAX : HUE_MAX)) return null;
+    // RSI's older pages use a vivid cyan (about 190-198 degrees) for highlights and glows, often very dark
+    // or faint. It's the same family as the accent blue, so it takes the accent colour.
+    const cyan = h >= 186 && h <= 199 && s >= 0.7;
+    if ((s >= ACCENT_MIN_SAT && l >= ACCENT_MIN_LIGHT) || cyan) { // accent
       const A = T.accent;
       return hslToRgb((h + (A.hue - UTILIFY_ACCENT_HUE) + 360) % 360, Math.min(1, s * A.sat * T.vibe), Math.min(0.97, l * A.lum));
     }
@@ -125,7 +131,7 @@
   function shiftValue(value, T, ctx) {
     const wantImages = !!(ctx && ctx.images && value.indexOf("url(") >= 0);
     if (value.indexOf("#") < 0 && value.indexOf("rgb") < 0 && !wantImages) return null;
-    const parts = value.split(/(url\([^)]*\))/); // never touch url(...) contents when recolouring colours
+    const parts = value.split(/(url\(\s*(?:"[^"]*"|'[^']*'|[^)]*)\s*\))/); // never touch url(...) contents when recolouring colours
     let changed = false;
     for (let i = 0; i < parts.length; i += 2) {
       parts[i] = parts[i].replace(COLOR_RE, (m) => {
@@ -138,10 +144,10 @@
     }
     if (wantImages) {
       for (let i = 1; i < parts.length; i += 2) {
-        const m = /^url\(\s*(["']?)(.*?)\1\s*\)$/.exec(parts[i]);
+        const m = /^url\(\s*(["']?)([\s\S]*?)\1\s*\)$/.exec(parts[i]);
         const abs = m && imgCandidate(m[2], ctx.base);
         if (!abs) continue;
-        const id = hashStr(abs);
+        const id = hashStr(abs.length > 300 ? abs.slice(0, 200) + abs.length + abs.slice(-60) : abs);
         if (imgDone.has(id)) { parts[i] = "var(--utl-i-" + id + "," + parts[i] + ")"; changed = true; } // original url is the fallback
         else if (!imgSkip.has(id) && !imgFailed.has(id) && ctx.used()) imgPending.set(id, abs);
       }
@@ -230,6 +236,7 @@
 
   // ---------- decorative background images ----------
   function imgCandidate(raw, base) {
+    if (/^data:image\/(png|jpeg|webp|svg\+xml)[;,]/i.test(raw)) return raw.length <= MAX_DATA_URL_BYTES * 1.4 ? raw : null; // small tiles inlined in the CSS
     try {
       const u = new URL(raw, base || location.href);
       if (u.protocol !== "https:" && u.protocol !== "http:") return null;
@@ -244,7 +251,20 @@
     try { return !!document.querySelector(sel.replace(TRAILING_PSEUDO_RE, "") || "*"); } catch (_) { return true; }
   }
 
+  function bytesFromDataUrl(url) {
+    const c = url.indexOf(",");
+    const meta = url.slice(5, c), body = url.slice(c + 1);
+    const type = meta.split(";")[0];
+    if (/;base64/i.test(meta)) {
+      const bin = atob(body), u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      return { buf: u8.buffer, type };
+    }
+    return { buf: new TextEncoder().encode(decodeURIComponent(body)).buffer, type };
+  }
+
   async function fetchBytes(url) {
+    if (url.startsWith("data:")) { try { return bytesFromDataUrl(url); } catch (_) { return { skip: true }; } }
     try { // RSI's CDN normally allows this directly...
       const r = await fetch(url, { credentials: "omit" });
       if (r.ok) {
@@ -289,16 +309,17 @@
     const img = ctx.getImageData(0, 0, w, h);
     const px = new Uint32Array(img.data.buffer); // little-endian: 0xAABBGGRR
 
-    let opaque = 0, chroma = 0, blue = 0;
-    const step = Math.max(1, Math.floor(px.length / 20000));
+    // Faint pixels count too: glows are often a vivid colour at 5-10% opacity
+    let visible = 0, chroma = 0, blue = 0;
+    const step = Math.max(1, Math.floor(px.length / 40000));
     for (let i = 0; i < px.length; i += step) {
       const p = px[i];
-      if ((p >>> 24) < 25) continue;
-      opaque++;
+      if ((p >>> 24) < 3) continue;
+      visible++;
       const [hh, ss] = rgbToHsl(p & 255, (p >>> 8) & 255, (p >>> 16) & 255);
-      if (ss >= SAT_MIN) { chroma++; if (hh >= HUE_MIN && hh <= HUE_MAX) blue++; }
+      if (ss >= SAT_MIN) { chroma++; if (hh >= IMG_HUE_MIN && hh <= IMG_HUE_MAX) blue++; }
     }
-    if (!opaque || chroma < opaque * 0.01 || blue < chroma * 0.75) return null; // not blue decoration
+    if (!visible || chroma < visible * 0.01 || blue < chroma * 0.75) return null; // not blue decoration
 
     const memo = new Map();
     for (let i = 0; i < px.length; i++) {
@@ -307,14 +328,19 @@
       const key = p & 0xffffff;
       let out = memo.get(key);
       if (out === undefined) {
-        const s = shiftRgb(key & 255, (key >>> 8) & 255, (key >>> 16) & 255, T);
+        const s = shiftRgb(key & 255, (key >>> 8) & 255, (key >>> 16) & 255, T, true);
         out = s ? (s[0] | (s[1] << 8) | (s[2] << 16)) : -1;
         memo.set(key, out);
       }
       if (out !== -1) px[i] = (p & 0xff000000) | out;
     }
     ctx.putImageData(img, 0, 0);
-    return cv.toDataURL("image/png");
+    let out = cv.toDataURL("image/png");
+    if (out.length > 1.5e6) { // big result: a high-quality WebP is far smaller than the PNG
+      const webp = cv.toDataURL("image/webp", 0.92);
+      if (webp.startsWith("data:image/webp") && webp.length < out.length * 0.7) out = webp;
+    }
+    return out;
   }
 
   // -> { data } recoloured, { skip: true } not worth recolouring, or null if the download failed
@@ -322,7 +348,7 @@
     const got = await fetchBytes(url);
     if (!got) return null;
     if (got.skip) return { skip: true };
-    const isSvg = /svg/i.test(got.type) || /\.svg$/i.test(new URL(url).pathname);
+    const isSvg = /svg/i.test(got.type) || (!url.startsWith("data:") && /\.svg$/i.test(new URL(url).pathname));
     let data = null;
     if (isSvg) {
       const text = recolorSvg(new TextDecoder().decode(got.buf), T);
@@ -377,6 +403,61 @@
     if (progressed) { renderImgStyle(); persistImgs(); schedule(0); }
   }
 
+  // ---------- big background layers, read from the page itself ----------
+  // The stylesheet pass can't see a background that comes from a stylesheet the browser won't let us read
+  // (e.g. served from another host without CORS), is set by a script, or is inlined. So we also look at
+  // the page's big layers (html, body and the large wrappers just inside them) and recolour what they
+  // actually paint. We read their ORIGINAL look by switching our own styles off for a moment.
+  function stableSelector(el) {
+    if (el === document.documentElement) return "html";
+    if (el === document.body) return "body";
+    let sel = null;
+    if (el.id && /^[A-Za-z][\w-]*$/.test(el.id)) sel = "#" + el.id;
+    else {
+      const cls = [...el.classList].filter((c) => /^[A-Za-z_][\w-]*$/.test(c)).slice(0, 3);
+      if (cls.length) sel = el.tagName.toLowerCase() + "." + cls.join(".");
+    }
+    try { return sel && document.querySelectorAll(sel).length === 1 ? sel : null; } catch (_) { return null; }
+  }
+
+  function bigBackgroundRules(T) {
+    const out = [];
+    const sheets = [styleEl, imgStyleEl].filter((e) => e && e.sheet);
+    sheets.forEach((e) => { e.sheet.disabled = true; });
+    try {
+      const list = [document.documentElement, document.body];
+      let frontier = [document.body];
+      for (let depth = 0; depth < 5 && list.length < 800; depth++) {
+        const next = [];
+        for (const e of frontier) for (const c of e.children) { list.push(c); next.push(c); }
+        frontier = next;
+      }
+      const minArea = innerWidth * innerHeight * 0.2;
+      for (const el of list) {
+        if (!el || !el.getBoundingClientRect || el.closest(PROTECTED_SEL)) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width * r.height < minArea) continue;
+        const cs = getComputedStyle(el);
+        const bi = cs.backgroundImage, bc = cs.backgroundColor;
+        let decl = "";
+        if (bi && bi !== "none") {
+          const nv = shiftValue(bi, T, { images: true, base: document.baseURI, used: () => true });
+          if (nv) decl += "background-image:" + nv + "!important;";
+        }
+        if (bc && bc !== "rgba(0, 0, 0, 0)" && bc !== "transparent") {
+          const nv = shiftValue(bc, T);
+          if (nv) decl += "background-color:" + nv + "!important;";
+        }
+        if (!decl) continue;
+        const key = hashStr(bi + "|" + bc);
+        el.setAttribute(BG_ATTR, key);
+        const stable = stableSelector(el); // lets the cached theme apply before the element is scanned again
+        out.push((stable ? stable + "," : "") + "[" + BG_ATTR + '="' + key + '"]{' + decl + "}");
+      }
+    } finally { sheets.forEach((e) => { e.sheet.disabled = false; }); }
+    return out;
+  }
+
   // ---------- build override CSS from RSI's own stylesheets ----------
   function build(T) {
     const chunks = [];
@@ -418,6 +499,8 @@
       if (decl) { count++; chunks.push("[" + INLINE_ATTR + '="' + key + '"]{' + decl + "}"); }
     });
     seen.forEach((k) => knownInline.add(k));
+
+    bigBackgroundRules(T).forEach((rule) => { count++; chunks.push(rule); });
 
     // Animated backgrounds are a <canvas> (we can't change its pixels), so tint it with a filter instead:
     // RSI's own background component, plus any other canvas that covers a big part of the window.

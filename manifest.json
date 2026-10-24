@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Utilify",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Handy tools for the RSI website: see prices in your own currency and recolour the site with custom themes.",
   "icons": {
     "16": "icons/icon16.png",
@@ -51,5 +51,6 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
-  }
+  },
+  "homepage_url": "https://github.com/Hooroo-mp4/Utilify"
 }

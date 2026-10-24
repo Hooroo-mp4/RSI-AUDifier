@@ -20,7 +20,7 @@ A small browser extension with handy tools for the [Roberts Space Industries](ht
 - Changes apply instantly to every open RSI tab.
 
 ### Also
-- Works with **Star Citizen Hangar XPLORer**: the "Total Spend" figure (e.g. `686.40 USD`) converts on hover too.
+- Works with **Star Citizen Hangar XPLORer**: the "Total Spend" figure (e.g. `686.40 USD`) converts on hover too. XPLORer's own interface (its filter buttons, sort, search, pager and the total panel with the CSV/JSON buttons) is **never recoloured** by themes, so it looks exactly as its developer intended.
 - No accounts, no tracking, no data collected (see [PRIVACY.md](PRIVACY.md)).
 
 ## Compatibility
@@ -153,7 +153,7 @@ From there you can switch it off or on, or remove it.
 | **Theme doesn't change everything** | Utilify recolours RSI's blue palette, so images, videos and a few older pages with their own styling may stay as they are. Themes are dark-mode interpretations of each brand (MISC, Origin and Tumbril are really light brands, so they appear as lighter steel, silver and tan). Open an issue with a screenshot and the page link. |
 | **Page flashes blue for a moment after changing theme** | Only the very first load after picking a new theme. It's remembered after that. |
 | **Opera shows a warning about developer-mode extensions** | This is normal for extensions loaded manually. |
-| **A price on the site isn't converting** | Open an issue (see below) and include a screenshot and the page link. |
+| **A price on the site isn't converting** | [Open an issue](https://github.com/Hooroo-mp4/Utilify/issues) and include a screenshot and the page link. |
 
 ## How it works
 - `currency.js` finds price text (such as `$49.50 USD` or `686.40 USD`), wraps it in a two-layer element and pairs it with the separate `USD` label. `currency.css` handles the slide animation.
@@ -163,7 +163,7 @@ From there you can switch it off or on, or remove it.
 - Rates are mid-market reference rates updated by the providers about once a day. Your card or PayPal's actual charge will differ because of bank fees and their own exchange margin. Treat converted prices as a guide.
 
 ## Reporting problems
-Open an issue on this GitHub repo with:
+Open an issue at **https://github.com/Hooroo-mp4/Utilify/issues** with:
 - the page link
 - a screenshot
 - your browser and version
@@ -172,4 +172,4 @@ Open an issue on this GitHub repo with:
 Pull requests are welcome. To work on it, load the folder as above, edit the files, then click the reload icon on the extensions page to see your changes.
 
 ## License
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). Copyright (c) 2026 Hooroo-mp4.

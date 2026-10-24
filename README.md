@@ -24,6 +24,7 @@ A small browser extension with handy tools for the [Roberts Space Industries](ht
 ### Also
 - Works with **Star Citizen Hangar XPLORer**: the "Total Spend" figure (e.g. `686.40 USD`) converts on hover too. XPLORer's own interface (its filter buttons, sort, search, pager and the total panel with the CSV/JSON buttons) is **never recoloured** by themes, so it looks exactly as its developer intended.
 - No accounts, no tracking, no data collected (see [PRIVACY.md](PRIVACY.md)).
+- Like it? The menu has a **Refer** button (https://hooroo.net/rsi) if you'd like to help the developer out by referring a friend. It only does anything if you click it.
 
 ## Compatibility
 | Browser | Supported |
